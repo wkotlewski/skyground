@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "provider": "NASA Images",
+  "license": "asset-specific",
+  "sourceUrl": "https://images.nasa.gov/docs/images.nasa.gov_api_docs.pdf",
+  "fetchedAtUtc": "2026-10-13T04:54:35.334Z",
+  "reviewedAtUtc": "2026-10-13T04:54:35.334Z",
+  "reviewNote": "Catalog pointers only. The image file is not bundled and is not shown. Rights are asset-specific.",
+  "records": [
+    {
+      "nasaId": "PIA01518",
+      "title": "Jupiter Plume",
+      "dateCreated": "1999-03-13T14:54:19Z",
+      "url": "https://images.nasa.gov/details/PIA01518",
+      "studentVisible": false,
+      "gradeReview": "not-reviewed"
+    },
+    {
+      "nasaId": "PIA09231",
+      "title": "Jupiter Ahoy!",
+      "dateCreated": "2007-04-02T23:50:01Z",
+      "url": "https://images.nasa.gov/details/PIA09231",
+      "studentVisible": false,
+      "gradeReview": "not-reviewed"
+    },
+    {
+      "nasaId": "PIA01601",
+      "title": "Time Series of Jupiter Aurora",
+      "dateCreated": "1998-06-10T15:25:18Z",
+      "url": "https://images.nasa.gov/details/PIA01601",
+      "studentVisible": false,
+      "gradeReview": "not-reviewed"
+    },
+    {
+      "nasaId": "PIA01370",
+      "title": "Jupiter Great Red Spot",
+      "dateCreated": "1998-12-05T14:11:02Z",
+      "url": "https://images.nasa.gov/details/PIA01370",
+      "studentVisible": false,
+      "gradeReview": "not-reviewed"
+    },
+    {
+      "nasaId": "PIA01650",
+      "title": "Historic Merger of Storms on Jupiter",
+      "dateCreated": "1998-12-07T12:07:08Z",
+      "url": "https://images.nasa.gov/details/PIA01650",
+      "studentVisible": false,
+      "gradeReview": "not-reviewed"
+    }
+  ]
+}

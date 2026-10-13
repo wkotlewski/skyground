@@ -35,7 +35,7 @@ npm test
 npm start
 ```
 
-Calculations run in the browser. Astronomy Engine computes the Sun, Moon, and planets. satellite.js propagates the bundled CelesTrak GP snapshot. Wikidata sizes are a reviewed snapshot. Natural Earth supplies the land outlines. The scene is a horizon chart and a world overview, and the list has the same records. Orbitron is the heading type. Those tools keep their own licenses. This page does not request CelesTrak, Wikidata, or Natural Earth when someone opens it.
+Calculations run in the browser. Astronomy Engine computes the Sun, Moon, and planets. satellite.js propagates the bundled CelesTrak GP snapshot. Wikidata supplies planet sizes, satellite catalog facts, and places near the two city reference points. Wikipedia introductions are short CC BY-SA excerpts. A NASA GIBS Blue Marble image from 2004-08-01 sits under Natural Earth land. NASA image and news records are stored and stay hidden until a grade review. The scene is a horizon chart and a world overview, and the list has the same records. Orbitron is the heading type. Those tools keep their own licenses. This page does not request CelesTrak, Wikidata, Wikipedia, or NASA when someone opens it.
 
 The rest of the product design stays with the SkyGround team.
 

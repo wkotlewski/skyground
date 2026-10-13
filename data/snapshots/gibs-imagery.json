@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "provider": "NASA GIBS",
+  "layer": "BlueMarble_NextGeneration",
+  "time": "2004-08-01",
+  "projection": "EPSG:4326",
+  "license": "layer-specific",
+  "sourceUrl": "https://nasa-gibs.github.io/gibs-api-docs/",
+  "attribution": "NASA GIBS Blue Marble Next Generation, 2004-08-01",
+  "note": "A dated global image bundled with this page. Not a live view and not a view from a selected spacecraft.",
+  "image": "gibs-blue-marble.jpg",
+  "fetchedAtUtc": "2026-10-13T04:51:38.138Z",
+  "reviewedAtUtc": "2026-10-13T04:51:38.138Z"
+}

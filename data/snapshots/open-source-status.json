@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "fetchedAtUtc": "2026-10-13T04:54:35.334Z",
+  "note": "One request per source. Failures were not retried. CelesTrak, Natural Earth, and the planet-size snapshot are refreshed by their own reviewed files.",
+  "sources": [
+    {
+      "id": "entity-facts",
+      "result": "written",
+      "detail": "5 catalog numbers, 38 places"
+    },
+    {
+      "id": "place-context",
+      "result": "written",
+      "detail": "10 extracts"
+    },
+    {
+      "id": "earth-imagery",
+      "result": "written",
+      "detail": "Blue Marble 2004-08-01"
+    },
+    {
+      "id": "space-media",
+      "result": "stored-hidden",
+      "detail": "5 pointers, not shown"
+    },
+    {
+      "id": "news",
+      "result": "stored-hidden",
+      "detail": "5 titles, not shown"
+    },
+    {
+      "id": "places",
+      "result": "failed",
+      "detail": "The OpenStreetMap request on 2026-10-13 returned a non-JSON error page. It was not retried. Pass --include-overpass to make one new manual request."
+    }
+  ]
+}

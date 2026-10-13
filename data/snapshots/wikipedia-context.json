@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "provider": "MediaWiki",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Wikipedia:Reusing_Wikipedia_content",
+  "fetchedAtUtc": "2026-10-13T04:54:35.334Z",
+  "reviewedAtUtc": "2026-10-13T04:54:35.334Z",
+  "reviewNote": "Short introductions with attribution. Not historic-event records and not a grade review.",
+  "records": [
+    {
+      "title": "Army Medical Museum and Library",
+      "wikidataId": "Q4794182",
+      "url": "https://en.wikipedia.org/wiki/Army_Medical_Museum_and_Library",
+      "extract": "The Army Medical Museum and Library (AMML) of the U.S. Army was a large brick building constructed in 1887 at South B Street (now Independence Avenue) and 7th Street, SW, Washington, D.C., which is directly on the National Mall. It was designated a National Historic Landmark in 1965 and added to the National Register o"
+    },
+    {
+      "title": "Abraham Lincoln University",
+      "wikidataId": "Q4669049",
+      "url": "https://en.wikipedia.org/wiki/Abraham_Lincoln_University",
+      "extract": "Abraham Lincoln University (ALU) is a private, for-profit online university based in Glendale, California."
+    },
+    {
+      "title": "Academy Museum of Motion Pictures",
+      "wikidataId": "Q6941059",
+      "url": "https://en.wikipedia.org/wiki/Academy_Museum_of_Motion_Pictures",
+      "extract": "The Academy Museum of Motion Pictures is a film museum that opened in 2021 located in Los Angeles, California, United States on Miracle Mile. The first large-scale museum of its kind in the United States, it houses part of the Academy Collection, the largest film-related collection in the world, with more than 52 milli"
+    },
+    {
+      "title": "ARCO Center for Visual Art",
+      "wikidataId": "Q4653612",
+      "url": "https://en.wikipedia.org/wiki/ARCO_Center_for_Visual_Art",
+      "extract": "The ARCO Center for Visual Art was a not-for-profit gallery, funded by the Atlantic Richfield Company in Los Angeles, California. It opened in 1976 and closed in 1984. The gallery focused on contemporary art. It was located at the Atlantic Richfield Plaza, 505 South Flower Street. Selected exhibitors were Carlos Almara"
+    },
+    {
+      "title": "American Poetry Museum",
+      "wikidataId": "Q4744690",
+      "url": "https://en.wikipedia.org/wiki/American_Poetry_Museum",
+      "extract": "The American Poetry Museum (APM) is a museum dedicated to American poetry, located in Brookland, Washington, D.C., United States. The museum was founded in 2004. As well as a traditional museum role, APM also provides a community meeting place."
+    },
+    {
+      "title": "Arlington Historical Museum",
+      "wikidataId": "Q17512884",
+      "url": "https://en.wikipedia.org/wiki/Arlington_Historical_Museum",
+      "extract": "The Arlington Historical Museum in Arlington, Virginia houses a comprehensive artifact collection on rotating display. Its exhibits interpret the history of the area from Captain John Smith's encounter with Algonquin Native Americans in 1608 to the near-present, including a section of the Pentagon wall that was destroy"
+    },
+    {
+      "title": "Armory Center for the Arts",
+      "wikidataId": "Q23950173",
+      "url": "https://en.wikipedia.org/wiki/Armory_Center_for_the_Arts",
+      "extract": "The Armory Center for the Arts is a non-profit community arts organization that offers arts education programs and contemporary art exhibitions in Pasadena, California, United States. It originated as the education department of the Pasadena Art Museum in 1947. After the museum closed in 1974 (and became the Norton Sim"
+    },
+    {
+      "title": "Anacostia Arts Center",
+      "wikidataId": "Q28402332",
+      "url": "https://en.wikipedia.org/wiki/Anacostia_Arts_Center",
+      "extract": "The Anacostia Arts Center is a multi-use arts space located at 1231 Good Hope Road SE in the Anacostia Historic District of Washington, D.C. Anacostia Arts Center, also known as the AAC, is a home for the arts, culture, and small businesses, where the physical space is used to employ and nourish the local arts and crea"
+    },
+    {
+      "title": "Armenian American Museum",
+      "wikidataId": "Q115978978",
+      "url": "https://en.wikipedia.org/wiki/Armenian_American_Museum",
+      "extract": "The Armenian American Museum and Cultural Center of California is a museum located in Glendale, California, United States, dedicated to preserving the history and culture of Armenian-Americans. The museum is anticipated to complete construction in late 2026."
+    },
+    {
+      "title": "3-D Space",
+      "wikidataId": "Q134369925",
+      "url": "https://en.wikipedia.org/wiki/3-D_Space",
+      "extract": "3-D SPACE is a museum located at 1200 N. Alvarado St. in Echo Park, Los Angeles, California, dedicated to 3-D media and technology, including stereoscopic photography, art, and cinema."
+    }
+  ]
+}

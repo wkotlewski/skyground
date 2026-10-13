@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { cities, cityObserver } from '../src/content/cities';
+import { contentFor, earthCatalog, skyCatalog } from '../src/ui/present/catalog';
 import { places } from '../src/content/places';
 import { resolveObserver, resolveOrientation } from '../src/privacy/location';
 import { calculateCelestialBodies } from '../src/sky/astronomy';
@@ -247,6 +248,27 @@ describe('privacy and layout', () => {
     expect(css).toMatch(/max-width:\s*800px/);
     expect(css).toMatch(/\.shell\s*\{\s*display:\s*block/);
     expect(css).toMatch(/min-height:\s*var\(--sg-touch\)/);
+  });
+});
+
+describe('open data funnel', () => {
+  test('space and earth records come from the bundled open snapshots', () => {
+    const sky = skyCatalog(cityObserver(cities.la), new Date('2026-10-12T03:30:00.000Z'));
+    const iss = sky.find((entity) => entity.id === 'norad-25544');
+    const jupiter = sky.find((entity) => entity.id === 'jupiter');
+    if (!iss || !jupiter) throw new Error('missing sky records');
+    expect(iss.facts.join(' ')).toMatch(/Wikidata Q25271/);
+    expect(iss.facts.join(' ')).toMatch(/National Aeronautics and Space Administration/);
+    expect(jupiter.facts.join(' ')).toMatch(/NASA Images catalog PIA/);
+    expect(jupiter.facts.join(' ')).toMatch(/not shown/);
+    const earth = earthCatalog();
+    expect(earth.some((entity) => entity.id.startsWith('wd-Q'))).toBe(true);
+    expect(earth.some((entity) => entity.facts.join(' ').includes('CC BY-SA'))).toBe(true);
+    const status = JSON.parse(readFileSync('data/snapshots/open-source-status.json', 'utf8')) as { sources: Array<{ id: string; result: string }> };
+    expect(status.sources.find((source) => source.id === 'places')?.result).toBe('failed');
+    const news = JSON.parse(readFileSync('data/snapshots/nasa-news.json', 'utf8')) as { records: Array<{ studentVisible: boolean }> };
+    expect(news.records.every((record) => record.studentVisible === false)).toBe(true);
+    expect(contentFor(jupiter, 'news', '6-8')[0]?.text).toMatch(/grade review/);
   });
 });
 

@@ -1,0 +1,468 @@
+{
+  "schemaVersion": 1,
+  "provider": "Wikidata",
+  "license": "CC0",
+  "sourceUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+  "queryUrl": "https://query.wikidata.org/",
+  "propertyNotes": "P377 is the satellite catalog number. Place coordinates are P625. Values are not converted.",
+  "fetchedAtUtc": "2026-10-13T04:54:35.334Z",
+  "reviewedAtUtc": "2026-10-13T04:54:35.334Z",
+  "reviewNote": "Checked that identifiers and coordinates parsed. This is not a grade review.",
+  "satellites": [
+    {
+      "noradId": "25544",
+      "items": [
+        {
+          "wikidataId": "Q25271",
+          "label": "International Space Station",
+          "operators": [
+            "National Aeronautics and Space Administration",
+            "European Space Agency",
+            "Japan Aerospace Exploration Agency",
+            "Roscosmos State Corporation",
+            "Canadian Space Agency"
+          ],
+          "launch": ""
+        },
+        {
+          "wikidataId": "Q331785",
+          "label": "Zarya",
+          "operators": [],
+          "launch": ""
+        }
+      ]
+    },
+    {
+      "noradId": "48274",
+      "items": [
+        {
+          "wikidataId": "Q5170154",
+          "label": "Tianhe",
+          "operators": [
+            "China National Space Administration"
+          ],
+          "launch": ""
+        }
+      ]
+    },
+    {
+      "noradId": "100882",
+      "items": [
+        {
+          "wikidataId": "Q115651860",
+          "label": "SpaceX Crew-13",
+          "operators": [
+            "SpaceX"
+          ],
+          "launch": ""
+        }
+      ]
+    },
+    {
+      "noradId": "100057",
+      "items": [
+        {
+          "wikidataId": "Q125577807",
+          "label": "Soyuz MS-29",
+          "operators": [
+            "Roscosmos State Corporation"
+          ],
+          "launch": ""
+        }
+      ]
+    },
+    {
+      "noradId": "69180",
+      "items": [
+        {
+          "wikidataId": "Q136850111",
+          "label": "Shenzhou 23",
+          "operators": [],
+          "launch": ""
+        }
+      ]
+    }
+  ],
+  "places": [
+    {
+      "wikidataId": "Q134369925",
+      "name": "3-D SPACE",
+      "lat": 34.0781817,
+      "lon": -118.2628987,
+      "categories": [
+        "museums"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q4669049",
+      "name": "Abraham Lincoln University",
+      "lat": 34.0614,
+      "lon": -118.301,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q6941059",
+      "name": "Academy Museum of Motion Pictures",
+      "lat": 34.063333333,
+      "lon": -118.360833333,
+      "categories": [
+        "museums"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q124111596",
+      "name": "Allan Hancock Foundation",
+      "lat": 34.0197149,
+      "lon": -118.2849788,
+      "categories": [
+        "museums"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q4744690",
+      "name": "American Poetry Museum",
+      "lat": 38.8668,
+      "lon": -76.9886,
+      "categories": [
+        "museums"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q28402332",
+      "name": "Anacostia Arts Center",
+      "lat": 38.866947,
+      "lon": -76.9887078,
+      "categories": [
+        "museums"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q4653612",
+      "name": "ARCO Center for Visual Art",
+      "lat": 34.0514,
+      "lon": -118.257,
+      "categories": [
+        "museums"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q17512884",
+      "name": "Arlington Historical Museum",
+      "lat": 38.8587,
+      "lon": -77.0676,
+      "categories": [
+        "museums"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q115978978",
+      "name": "Armenian American Museum",
+      "lat": 34.14332,
+      "lon": -118.25456,
+      "categories": [
+        "museums"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q23950173",
+      "name": "Armory Center for the Arts",
+      "lat": 34.148338,
+      "lon": -118.149297,
+      "categories": [
+        "museums"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q4794182",
+      "name": "Army Medical Museum and Library",
+      "lat": 38.8883,
+      "lon": -77.0228,
+      "categories": [
+        "museums"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q3272069",
+      "name": "Art Center College of Design",
+      "lat": 34.168611111,
+      "lon": -118.185,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q713932",
+      "name": "Arts and Industries Building",
+      "lat": 38.888333333,
+      "lon": -77.024444444,
+      "categories": [
+        "museums"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q4809705",
+      "name": "Association of Children's Museums",
+      "lat": 38.851359,
+      "lon": -77.051934,
+      "categories": [
+        "museums"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q4893974",
+      "name": "Bernardo de Gálvez",
+      "lat": 38.895683,
+      "lon": -77.048533,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q110281286",
+      "name": "Black Lives Matter Memorial Fence",
+      "lat": 38.900138888,
+      "lon": -77.036527777,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q139504374",
+      "name": "Burbank Centennial Walkway",
+      "lat": 34.183533,
+      "lon": -118.309193,
+      "categories": [
+        "history"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q161562",
+      "name": "California Institute of Technology",
+      "lat": 34.1385,
+      "lon": -118.1244,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q5020643",
+      "name": "California Intercontinental University",
+      "lat": 33.9789,
+      "lon": -118.416,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q1026909",
+      "name": "California State University, Dominguez Hills",
+      "lat": 33.864722222,
+      "lon": -118.256111111,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q1026932",
+      "name": "California State University, Los Angeles",
+      "lat": 34.066666666,
+      "lon": -118.167777777,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q5081831",
+      "name": "Charles R. Drew University of Medicine and Science",
+      "lat": 33.925634,
+      "lon": -118.242594,
+      "categories": [
+        "colleges"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q138821332",
+      "name": "Compass Rose cenotaph fountain dedicated to Harriet Quimby",
+      "lat": 34.18999,
+      "lon": -118.356515,
+      "categories": [
+        "history"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q1132041",
+      "name": "Corcoran School of the Arts & Design",
+      "lat": 38.896277672,
+      "lon": -77.039705089,
+      "categories": [
+        "colleges"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q49490657",
+      "name": "Fort Moore Pioneer Memorial",
+      "lat": 34.058333333,
+      "lon": -118.241944444,
+      "categories": [
+        "history"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q48800899",
+      "name": "Francis Scott Key Memorial",
+      "lat": 38.90483,
+      "lon": -77.06776,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q49491418",
+      "name": "Franklin Delano Roosevelt Memorial",
+      "lat": 38.893055555,
+      "lon": -77.023611111,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q5531982",
+      "name": "General Jose de San Martin Memorial",
+      "lat": 38.896667,
+      "lon": -77.045556,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q18344115",
+      "name": "George Washington University School of Nursing",
+      "lat": 38.8998,
+      "lon": -77.0462,
+      "categories": [
+        "colleges"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q5574772",
+      "name": "Go For Broke Monument",
+      "lat": 34.051181,
+      "lon": -118.239019,
+      "categories": [
+        "history"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q5592028",
+      "name": "Graduate School USA",
+      "lat": 38.88653,
+      "lon": -77.0203,
+      "categories": [
+        "colleges"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q15223678",
+      "name": "Henry Wadsworth Longfellow Memorial",
+      "lat": 38.90583333,
+      "lon": -77.04166667,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q22080849",
+      "name": "Human Resources University",
+      "lat": 38.894719,
+      "lon": -77.04415,
+      "categories": [
+        "colleges"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q213559",
+      "name": "Lincoln Memorial",
+      "lat": 38.889277777,
+      "lon": -77.050138888,
+      "categories": [
+        "history"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q14712798",
+      "name": "Marymount University",
+      "lat": 38.905,
+      "lon": -77.129,
+      "categories": [
+        "colleges"
+      ],
+      "region": "washington-dc"
+    },
+    {
+      "wikidataId": "Q7231495",
+      "name": "Portal of the Folded Wings Shrine to Aviation",
+      "lat": 34.19027778,
+      "lon": -118.36055556,
+      "categories": [
+        "history"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q136677809",
+      "name": "Space Shuttle Challenger Monument",
+      "lat": 34.050045,
+      "lon": -118.241937,
+      "categories": [
+        "history"
+      ],
+      "region": "los-angeles"
+    },
+    {
+      "wikidataId": "Q7621996",
+      "name": "Stratford University",
+      "lat": 38.9074,
+      "lon": -77.2145,
+      "categories": [
+        "colleges"
+      ],
+      "region": "washington-dc"
+    }
+  ]
+}

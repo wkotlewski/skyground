@@ -1,5 +1,9 @@
 import land from '../../../data/world/ne-110m-land.json';
+import marbleUrl from '../../../data/snapshots/gibs-blue-marble.jpg';
 import type { Area, Entity, World } from './types';
+
+const earthImage = typeof Image === 'function' ? new Image() : null;
+if (earthImage) earthImage.src = marbleUrl;
 
 interface SceneHooks {
   onSelect: (id: string) => void;
@@ -180,6 +184,11 @@ export class Scene {
   private drawEarth(context: CanvasRenderingContext2D) {
     context.fillStyle = '#101014';
     context.fillRect(0, 0, this.width, this.height);
+    if (earthImage?.complete && earthImage.naturalWidth) {
+      context.drawImage(earthImage, 0, 0, this.width, this.height);
+      context.fillStyle = 'rgba(5, 5, 8, 0.55)';
+      context.fillRect(0, 0, this.width, this.height);
+    }
     context.fillStyle = '#2a2a30';
     context.strokeStyle = '#8d8d96';
     context.lineWidth = 0.6;

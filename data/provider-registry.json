@@ -71,9 +71,9 @@
       "name": "NASA GIBS",
       "licenseOrTerms": "layer-specific",
       "documentationUrl": "https://nasa-gibs.github.io/gibs-api-docs/",
-      "execution": "configured-imagery-service",
+      "execution": "reviewed-ingestion",
       "capability": "dated-earth-imagery",
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "places",
@@ -100,16 +100,16 @@
       "documentationUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
       "execution": "reviewed-ingestion",
       "capability": "structured-facts",
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "place-context",
       "name": "MediaWiki",
-      "licenseOrTerms": "page-specific",
-      "documentationUrl": "https://www.mediawiki.org/wiki/API:Geosearch",
+      "licenseOrTerms": "CC BY-SA 4.0",
+      "documentationUrl": "https://en.wikipedia.org/wiki/Wikipedia:Reusing_Wikipedia_content",
       "execution": "reviewed-ingestion",
       "capability": "place-context",
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "media",

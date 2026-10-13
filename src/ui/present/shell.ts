@@ -281,7 +281,7 @@ export function mountPresentation(root: HTMLElement, options: Options = {}) {
     if (readout) readout.textContent = `${time.heading}: ${time.utc}`;
     caption.textContent = state.world === 'sky'
       ? 'Calculated directions · not to scale · below the horizon stays in the list'
-      : 'Natural Earth land · public domain · not a street map';
+      : 'NASA GIBS Blue Marble, 2004-08-01, under Natural Earth land. Not a live view or a street map.';
     scene.update({
       world: state.world,
       items: visible,

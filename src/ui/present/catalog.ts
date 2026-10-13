@@ -1,5 +1,6 @@
 import type { GradeBand, Interest, Observer } from '../../contracts';
 import { cities, cityObserver, type CityId } from '../../content/cities';
+import { nasaImageLine, satelliteSourceLines, wikidataFetchedAt, wikidataPlaces, wikipediaLine } from '../../content/open-data';
 import { places } from '../../content/places';
 import { planetFact, planetFactTimestamps } from '../../content/planet-facts';
 import { distanceKm, findPlaces } from '../../geo';
@@ -28,6 +29,8 @@ function skyEntityFromBody(body: ReturnType<typeof calculateCelestialBodies>[num
   if (fact && fact.measurements.filter((measurement) => measurement.label === 'mean radius' && measurement.unit === 'kilometre').length > 1) {
     facts.push('Wikidata lists more than one mean radius. All of them are shown.');
   }
+  const imageLine = nasaImageLine(body.name);
+  if (imageLine) facts.push(imageLine);
   return {
     id: body.id,
     world: 'sky',
@@ -87,6 +90,7 @@ export function skyCatalog(observer: Observer, at: Date): Entity[] {
         `Element epoch ${satellite.epochUtc}`,
         `Snapshot fetched ${reviewedSnapshot.fetchedAtUtc}`,
         `Calculated ${satellite.look.calculatedAtUtc}`,
+        ...satelliteSourceLines(satellite.noradId),
       ],
     };
   });
@@ -127,15 +131,18 @@ export function earthCatalog(): Entity[] {
       facts: [`${city.lat}°, ${city.lon}°`, `Height ${city.heightMeters} m`],
     };
   });
+  const curatedNames = new Set(places.map((place) => place.name.toLowerCase()));
   const placeEntities: Entity[] = places.map((place) => {
     const kind = placeKind(place.categories);
+    const linked = wikidataPlaces.find((item) => item.name.toLowerCase() === place.name.toLowerCase());
+    const context = linked ? wikipediaLine(linked.wikidataId) : null;
     return {
       id: place.id,
       world: 'earth',
       kind,
       name: place.name,
       subtitle: placeSubtitle(kind),
-      description: `${place.prompt} ${place.locationNote}`,
+      description: `${place.prompt} ${place.locationNote}${context ? ` ${context}` : ''}`,
       source: {
         name: place.source.organization,
         url: place.url,
@@ -143,10 +150,41 @@ export function earthCatalog(): Entity[] {
         retrievedAt: place.source.fetchedAtUtc,
       },
       location: { lat: place.lat, lon: place.lon },
-      facts: [place.locationNote, place.source.organization],
+      facts: [
+        place.locationNote,
+        place.source.organization,
+        ...(linked ? [`Wikidata ${linked.wikidataId}. Coordinate from Wikidata, not a survey mark.`] : []),
+        ...(context ? [context] : []),
+      ],
     };
   });
-  return [...cityEntities, ...placeEntities];
+  const openPlaces: Entity[] = wikidataPlaces
+    .filter((place) => !curatedNames.has(place.name.toLowerCase()))
+    .map((place) => {
+      const kind = placeKind(place.categories);
+      const context = wikipediaLine(place.wikidataId);
+      return {
+        id: `wd-${place.wikidataId}`,
+        world: 'earth' as const,
+        kind,
+        name: place.name,
+        subtitle: placeSubtitle(kind),
+        description: `Wikidata ${place.wikidataId}. The coordinate is from Wikidata and is not a survey mark.${context ? ` ${context}` : ''} A Wikipedia introduction is not a historic event.`,
+        source: {
+          name: 'Wikidata',
+          url: `https://www.wikidata.org/wiki/${place.wikidataId}`,
+          license: 'CC0',
+          retrievedAt: wikidataFetchedAt,
+        },
+        location: { lat: place.lat, lon: place.lon },
+        facts: [
+          `${place.lat.toFixed(4)}°, ${place.lon.toFixed(4)}°`,
+          'OpenStreetMap was requested once and did not return JSON. This place is from Wikidata.',
+          ...(context ? [context] : []),
+        ],
+      };
+    });
+  return [...cityEntities, ...placeEntities, ...openPlaces];
 }
 
 function interestCategory(interest: string): Interest | 'space' | 'all' {
@@ -168,7 +206,13 @@ export function connectPlaces(input: {
   const anchor = input.relation === 'subpoint' && input.entity.groundPoint ? input.entity.groundPoint : input.observer;
   const category = interestCategory(input.interest);
   const radius = input.relation === 'topic' ? 20_000 : input.radiusKm;
-  const found = findPlaces(places, anchor, category === 'all' ? 'all' : category, radius);
+  const searchable = [
+    ...places,
+    ...wikidataPlaces
+      .filter((place) => !places.some((curated) => curated.name.toLowerCase() === place.name.toLowerCase()))
+      .map((place) => ({ ...place, id: `wd-${place.wikidataId}` })),
+  ];
+  const found = findPlaces(searchable, anchor, category === 'all' ? 'all' : category, radius);
   return found.map((place) => {
     const entity = earthCatalog().find((item) => item.id === place.id);
     if (!entity) throw new Error(`Missing place ${place.id}`);
