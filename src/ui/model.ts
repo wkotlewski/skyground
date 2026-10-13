@@ -1,4 +1,4 @@
-import type { GradeBand, Interest } from '../contracts';
+import type { GradeBand, Interest, Observer } from '../contracts';
 import type { City } from '../content/cities';
 import { cityObserver } from '../content/cities';
 import type { CuratedPlace } from '../content/places';
@@ -56,7 +56,7 @@ export interface AppModel {
   radiusKm: number;
   observer: { lat: number; lon: number };
   anchor: { lat: number; lon: number };
-  anchorKind: 'city' | 'subpoint';
+  anchorKind: 'city' | 'place' | 'subpoint';
   mission: string;
   snapshotFetchedAtUtc: string;
   coverageNote: string;
@@ -77,6 +77,9 @@ export interface ModelInput {
   interest: InterestFilter;
   grade: GradeBand;
   search: string;
+  placeQuery?: string;
+  observer?: Observer;
+  observerName?: string;
   minElevationDeg: number;
   selectedId: string;
   places: CuratedPlace[];
@@ -135,7 +138,8 @@ function bodyDetail(name: string, kind: string, azimuth: number, elevation: numb
 
 export function buildModel(input: ModelInput): AppModel {
   const time = formatSelectedTime(input.atUtc);
-  const observer = cityObserver(input.city);
+  const observer = input.observer ?? cityObserver(input.city);
+  const observerName = input.observerName ?? input.city.name;
   const bodies = calculateCelestialBodies(observer, input.atUtc);
   const satellites = calculateSatellites(observer, input.atUtc);
   const warnings: string[] = [];
@@ -206,8 +210,10 @@ export function buildModel(input: ModelInput): AppModel {
   }
   let placeRows: PlaceRow[] = [];
   try {
-    placeRows = findPlaces(input.places, anchor, input.interest, input.radiusKm)
-      .filter((place) => !input.search || place.name.toLowerCase().includes(input.search.trim().toLowerCase()))
+    const placeRadius = effectiveMode === 'related-interest' ? 20_000 : input.radiusKm;
+    const placeQuery = (input.placeQuery ?? '').trim().toLowerCase();
+    placeRows = findPlaces(input.places, anchor, input.interest, placeRadius)
+      .filter((place) => !placeQuery || place.name.toLowerCase().includes(placeQuery))
       .map((place) => ({
         id: place.id,
         name: place.name,
@@ -227,9 +233,9 @@ export function buildModel(input: ModelInput): AppModel {
   const connection = effectiveMode === 'under-satellite'
     ? 'These curated places are near the satellite’s ground point. That does not mean the satellite is imaging them or that it is above the horizon.'
     : effectiveMode === 'related-interest'
-      ? 'These curated places match the interest filter near the city. A shared topic is not evidence the sky object observed or affected the place.'
-      : 'These curated places are near the chosen city. No reviewed scientific link to the selected sky object is included.';
-  const anchorLabel = effectiveMode === 'under-satellite' ? 'Search center: satellite ground point' : `Search center: ${input.city.name}`;
+      ? 'These curated places share the interest you chose. A shared topic is not a geographic link, and it is not evidence the sky object observed or affected the place.'
+      : 'These curated places are near the chosen observer. No reviewed scientific link to the selected sky object is included.';
+  const anchorLabel = effectiveMode === 'under-satellite' ? 'Search center: satellite ground point' : `Search center: ${observerName}`;
   if (!skyRows.length) {
     warnings.push(input.search.trim() ? 'No sky objects match that search.' : 'No sky objects are inside this sky area.');
   }
@@ -252,7 +258,7 @@ export function buildModel(input: ModelInput): AppModel {
     radiusKm: input.radiusKm,
     observer: { lat: observer.lat, lon: observer.lon },
     anchor: { lat: anchor.lat, lon: anchor.lon },
-    anchorKind: effectiveMode === 'under-satellite' ? 'subpoint' : 'city',
+    anchorKind: effectiveMode === 'under-satellite' ? 'subpoint' : observer.locationMode === 'place' ? 'place' : 'city',
     mission: MISSIONS[input.grade],
     snapshotFetchedAtUtc: reviewedSnapshot.fetchedAtUtc,
     coverageNote: 'Places are a small curated set for the Los Angeles area and Washington, DC. Other regions are not in this pack.',

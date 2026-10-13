@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "provider": "Wikidata",
+  "propertyNotes": "P2386 is diameter. P2120 is mean radius. Values are copied from the Wikidata query and are not converted between units.",
+  "license": "CC0",
+  "sourceUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+  "queryUrl": "https://query.wikidata.org/",
+  "fetchedAtUtc": "2026-10-13T02:50:00.000Z",
+  "reviewedAtUtc": "2026-10-13T02:50:00.000Z",
+  "records": [
+    {
+      "id": "sun",
+      "wikidataId": "Q525",
+      "name": "Sun",
+      "measurements": [
+        { "property": "P2120", "label": "mean radius", "value": 695700, "unit": "kilometre" },
+        { "property": "P2120", "label": "mean radius", "value": 1, "unit": "solar radius" }
+      ]
+    },
+    {
+      "id": "moon",
+      "wikidataId": "Q405",
+      "name": "Moon",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 3476.2, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "mercury",
+      "wikidataId": "Q308",
+      "name": "Mercury",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 4878, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "venus",
+      "wikidataId": "Q313",
+      "name": "Venus",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 12103.6, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "mars",
+      "wikidataId": "Q111",
+      "name": "Mars",
+      "measurements": [
+        { "property": "P2120", "label": "mean radius", "value": 3396.19, "unit": "kilometre" },
+        { "property": "P2120", "label": "mean radius", "value": 3379.2, "unit": "kilometre" },
+        { "property": "P2120", "label": "mean radius", "value": 3389.5, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "jupiter",
+      "wikidataId": "Q319",
+      "name": "Jupiter",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 142984, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "saturn",
+      "wikidataId": "Q193",
+      "name": "Saturn",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 120536, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "uranus",
+      "wikidataId": "Q324",
+      "name": "Uranus",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 51118, "unit": "kilometre" }
+      ]
+    },
+    {
+      "id": "neptune",
+      "wikidataId": "Q332",
+      "name": "Neptune",
+      "measurements": [
+        { "property": "P2386", "label": "diameter", "value": 49528, "unit": "kilometre" }
+      ]
+    }
+  ]
+}

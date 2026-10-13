@@ -8,20 +8,20 @@ SkyGround is a browser page for curious students. You pick a city and a time, se
 
 ## Use it for
 
-- Seeing where the Sun, Moon, and planets are from Los Angeles or Washington, DC
+- Seeing where the Sun, Moon, and planets are from a chosen city or place
 - Following a few Earth satellites from a reviewed snapshot
-- Comparing a place near the city with the ground point beneath a satellite
-- Reading the same sky as a list, a horizon chart, or a 3D view
+- Comparing a place near that observer with the ground point beneath a satellite
+- Starting from a place, an object in space, or an area you choose
 
 ## What you can do
 
 Choose a city, a selected time, and an interest. Sky directions are calculated on this device. Satellite positions use a snapshot stored with this page. The page does not ask for your location.
 
-- **Sky** shows azimuth and elevation. North is up. Above the horizon is a geometric angle.
-- **Earth** lists curated places near the city, or near a satellite’s ground point.
-- **3D sky** uses the same directions. Marker size is not distance or brightness.
+- **Sky** shows azimuth and elevation for the selected time. North is up. Above the horizon is a geometric angle. The list and the 3D view use the same objects.
+- **Earth** shows Natural Earth land and curated places near the observer, inside a chosen area, or near a satellite’s ground point.
 - A satellite ground point is the place beneath the satellite. It is not a camera footprint.
-- Planets and the Moon stay connected to the city. They do not get a satellite ground point.
+- Planets, the Sun, and the Moon stay on a learning topic. They do not get a satellite ground point.
+- Media, history, and news stay hidden until a reviewed source is available.
 
 Place coordinates are examples for those two cities.
 
@@ -35,7 +35,7 @@ npm test
 npm start
 ```
 
-Calculations run in the browser. Astronomy Engine computes the Sun, Moon, and planets. satellite.js propagates the bundled CelesTrak GP snapshot. Three.js draws the optional 3D sky. Orbitron is the heading type. Those tools keep their own licenses. This page does not request CelesTrak when someone opens it.
+Calculations run in the browser. Astronomy Engine computes the Sun, Moon, and planets. satellite.js propagates the bundled CelesTrak GP snapshot. Wikidata sizes are a reviewed snapshot. Natural Earth supplies the land outlines. Three.js draws the optional 3D sky. Orbitron is the heading type. Those tools keep their own licenses. This page does not request CelesTrak, Wikidata, or Natural Earth when someone opens it.
 
 The rest of the product design stays with the SkyGround team.
 

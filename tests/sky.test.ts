@@ -19,7 +19,6 @@ import {
 import { formatSelectedTime } from '../src/sky/time';
 import { splitTrackAtAntimeridian } from '../src/geo';
 import { buildModel } from '../src/ui/model';
-import { panesForWidth } from '../src/ui/render';
 
 const la = cityObserver(cities.la);
 const dc = cityObserver(cities.dc);
@@ -242,13 +241,11 @@ describe('privacy and layout', () => {
     });
   });
 
-  test('phone width shows one pane and desktop shows both', () => {
-    expect(panesForWidth(390, 'sky')).toEqual({ sky: true, earth: false });
-    expect(panesForWidth(390, 'earth')).toEqual({ sky: false, earth: true });
-    expect(panesForWidth(1200, 'sky')).toEqual({ sky: true, earth: true });
+  test('wide windows keep the observer beside the screen', () => {
     const css = readFileSync('styles.css', 'utf8');
-    expect(css).toMatch(/max-width:\s*800px/);
-    expect(css).toMatch(/\.pane\.is-active/);
+    expect(css).toMatch(/min-width:\s*900px/);
+    expect(css).toMatch(/grid-template-columns:\s*280px 1fr/);
+    expect(css).toMatch(/min-height:\s*var\(--sg-touch\)/);
   });
 });
 

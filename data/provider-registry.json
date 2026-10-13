@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "status": "partial-adapters",
+  "requiredPolicy": "open-source-engines-public-or-open-data-with-source-specific-rights",
+  "providers": [
+    {
+      "id": "space-renderer",
+      "name": "three.js",
+      "licenseOrTerms": "MIT",
+      "documentationUrl": "https://github.com/mrdoob/three.js",
+      "execution": "client",
+      "capability": "3d-space-rendering",
+      "enabled": true
+    },
+    {
+      "id": "satellite-calculation",
+      "name": "satellite.js",
+      "licenseOrTerms": "MIT",
+      "documentationUrl": "https://github.com/shashwatak/satellite-js",
+      "execution": "client",
+      "capability": "satellite-geometry",
+      "enabled": true
+    },
+    {
+      "id": "orbital-elements",
+      "name": "CelesTrak",
+      "licenseOrTerms": "public-service-terms",
+      "documentationUrl": "https://celestrak.org/usage-policy.php",
+      "execution": "shared-ingestion",
+      "capability": "gp-json-omm",
+      "enabled": true
+    },
+    {
+      "id": "planet-calculation",
+      "name": "Astronomy Engine",
+      "licenseOrTerms": "MIT",
+      "documentationUrl": "https://github.com/cosinekitty/astronomy",
+      "execution": "client",
+      "capability": "planet-moon-sun-geometry",
+      "enabled": true
+    },
+    {
+      "id": "planet-facts",
+      "name": "Wikidata",
+      "licenseOrTerms": "CC0",
+      "documentationUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+      "execution": "reviewed-ingestion",
+      "capability": "planet-details",
+      "enabled": true
+    },
+    {
+      "id": "earth-renderer",
+      "name": "CesiumJS",
+      "licenseOrTerms": "Apache-2.0",
+      "documentationUrl": "https://github.com/CesiumGS/cesium",
+      "execution": "client",
+      "capability": "earth-globe-map",
+      "enabled": false
+    },
+    {
+      "id": "world-basemap",
+      "name": "Natural Earth",
+      "licenseOrTerms": "public-domain",
+      "documentationUrl": "https://www.naturalearthdata.com/about/terms-of-use/",
+      "execution": "static-pack",
+      "capability": "world-geography",
+      "enabled": true
+    },
+    {
+      "id": "earth-imagery",
+      "name": "NASA GIBS",
+      "licenseOrTerms": "layer-specific",
+      "documentationUrl": "https://nasa-gibs.github.io/gibs-api-docs/",
+      "execution": "configured-imagery-service",
+      "capability": "dated-earth-imagery",
+      "enabled": false
+    },
+    {
+      "id": "places",
+      "name": "OpenStreetMap / Overpass",
+      "licenseOrTerms": "ODbL-1.0",
+      "documentationUrl": "https://www.openstreetmap.org/copyright",
+      "execution": "shared-ingestion",
+      "capability": "pois-geography",
+      "enabled": false
+    },
+    {
+      "id": "search",
+      "name": "Local gazetteer",
+      "licenseOrTerms": "curated-pack",
+      "documentationUrl": "https://www.naturalearthdata.com/about/terms-of-use/",
+      "execution": "static-pack",
+      "capability": "place-search",
+      "enabled": true
+    },
+    {
+      "id": "entity-facts",
+      "name": "Wikidata",
+      "licenseOrTerms": "CC0-structured-data",
+      "documentationUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+      "execution": "reviewed-ingestion",
+      "capability": "structured-facts",
+      "enabled": false
+    },
+    {
+      "id": "place-context",
+      "name": "MediaWiki",
+      "licenseOrTerms": "page-specific",
+      "documentationUrl": "https://www.mediawiki.org/wiki/API:Geosearch",
+      "execution": "reviewed-ingestion",
+      "capability": "place-context",
+      "enabled": false
+    },
+    {
+      "id": "media",
+      "name": "Wikimedia Commons",
+      "licenseOrTerms": "file-specific",
+      "documentationUrl": "https://www.mediawiki.org/wiki/API:Imageinfo",
+      "execution": "reviewed-ingestion",
+      "capability": "images-and-credit",
+      "enabled": false
+    },
+    {
+      "id": "space-media",
+      "name": "NASA Images / 3D Resources",
+      "licenseOrTerms": "asset-specific",
+      "documentationUrl": "https://github.com/nasa/NASA-3D-Resources",
+      "execution": "reviewed-ingestion",
+      "capability": "models-textures-media",
+      "enabled": false
+    },
+    {
+      "id": "font",
+      "name": "Orbitron",
+      "licenseOrTerms": "OFL-1.1",
+      "documentationUrl": "https://github.com/google/fonts/blob/main/ofl/orbitron/OFL.txt",
+      "execution": "bundled-asset",
+      "capability": "heading-font",
+      "enabled": true
+    }
+  ]
+}
