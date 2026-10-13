@@ -241,10 +241,11 @@ describe('privacy and layout', () => {
     });
   });
 
-  test('wide windows keep the observer beside the screen', () => {
+  test('wide windows keep the starting list beside the scene and phones stack them', () => {
     const css = readFileSync('styles.css', 'utf8');
-    expect(css).toMatch(/min-width:\s*900px/);
-    expect(css).toMatch(/grid-template-columns:\s*280px 1fr/);
+    expect(css).toMatch(/grid-template-columns:\s*320px minmax\(0, 1fr\)/);
+    expect(css).toMatch(/max-width:\s*800px/);
+    expect(css).toMatch(/\.shell\s*\{\s*display:\s*block/);
     expect(css).toMatch(/min-height:\s*var\(--sg-touch\)/);
   });
 });
