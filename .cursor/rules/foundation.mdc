@@ -1,0 +1,19 @@
+---
+description: SkyGround science and student privacy constraints for the public app
+alwaysApply: true
+---
+Honor user instructions above project preferences. Product notes live in the private repository, not here.
+- Distinguish above-horizon, near-overhead, Earth-satellite subpoint, instrument footprint, and thematic connection.
+- Planets and the Moon use the astronomy adapter. They have no artificial-satellite ground anchor.
+- Compute in UTC. Keep element epoch, snapshot fetch time, and calculation time separate.
+- No accounts, analytics, student location history, or unexpected permissions.
+- No geolocation in URLs, logs, persistent storage, repositories, or exported student work.
+- Never poll CelesTrak from a student's browser. Shared ingestion stops on errors and does not retry automatically.
+- Keep keys out of frontend assets.
+- Do not infer historic events or mission relationships from proximity alone.
+- Student media, news, and events need provenance, rights, and grade review before they appear.
+- Use safe text rendering and validated HTTPS links.
+- Keep list alternatives, focus, contrast, touch targets, and empty states.
+- Add numerical tests for real sky calculations. Pin dependency versions and commit the lockfile.
+- Sky angular selection and an Earth geographic area are different inputs.
+- No required commercial sky engine, paid planet API, or fabricated provider data.

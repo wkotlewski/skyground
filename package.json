@@ -1,0 +1,31 @@
+{
+  "name": "skyground",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "K-12 sky and Earth exploration app",
+  "dependencies": {
+    "@fontsource/orbitron": "5.3.0",
+    "astronomy-engine": "2.1.19",
+    "satellite.js": "7.1.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.7.1",
+    "@types/three": "0.186.0",
+    "happy-dom": "21.0.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
+  }
+}
