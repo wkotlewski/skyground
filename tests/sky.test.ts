@@ -12,8 +12,8 @@ import {
   elementAgeMs,
   freshnessForAge,
   groundTrack,
+  loadSnapshot,
   propagateRecord,
-  reviewedSnapshot,
   validateOmm,
   type OmmRecord,
 } from '../src/sky/satellites';
@@ -21,6 +21,8 @@ import { formatSelectedTime } from '../src/sky/time';
 import { splitTrackAtAntimeridian } from '../src/geo';
 import { buildModel } from '../src/ui/model';
 
+/** Pinned 2026-10-12 stations snapshot. Reference outputs below were computed from these exact elements. */
+const reviewedSnapshot = loadSnapshot(JSON.parse(readFileSync('tests/fixtures/gp-stations-2026-10-12.json', 'utf8')));
 const la = cityObserver(cities.la);
 const dc = cityObserver(cities.dc);
 const laTime = new Date('2026-01-15T08:00:00.000Z');
@@ -78,7 +80,7 @@ describe('satellite snapshot propagation', () => {
   const at = new Date('2026-10-12T03:30:00.000Z');
 
   test('propagates ISS with satellite.js 7.1.0 reference output', () => {
-    const iss = calculateSatellites(la, at).find((item) => item.status === 'available' && item.satellite.noradId === 25544);
+    const iss = calculateSatellites(la, at, reviewedSnapshot).find((item) => item.status === 'available' && item.satellite.noradId === 25544);
     expect(iss?.status).toBe('available');
     if (iss?.status !== 'available') return;
     expect(iss.satellite.subpoint.lat).toBeCloseTo(7.08006, 3);
@@ -89,7 +91,7 @@ describe('satellite snapshot propagation', () => {
     expect(iss.satellite.altitudeKm).toBeGreaterThan(300);
     expect(iss.satellite.altitudeKm).toBeLessThan(500);
     expect(Math.abs(iss.satellite.subpoint.lat)).toBeLessThanOrEqual(iss.inclinationDeg + 0.2);
-    const fromDc = calculateSatellites(dc, at).find((item) => item.status === 'available' && item.satellite.noradId === 25544);
+    const fromDc = calculateSatellites(dc, at, reviewedSnapshot).find((item) => item.status === 'available' && item.satellite.noradId === 25544);
     if (fromDc?.status !== 'available') throw new Error('missing ISS');
     expect(fromDc.satellite.look.azimuthDeg).toBeCloseTo(83.8913, 3);
     expect(fromDc.satellite.look.elevationDeg).toBeCloseTo(-41.0609, 3);
@@ -97,7 +99,7 @@ describe('satellite snapshot propagation', () => {
   });
 
   test('keeps a six-digit NORAD id', () => {
-    const soyuz = calculateSatellites(la, at).find((item) => item.status === 'available' && item.satellite.noradId === 100057);
+    const soyuz = calculateSatellites(la, at, reviewedSnapshot).find((item) => item.status === 'available' && item.satellite.noradId === 100057);
     expect(soyuz?.status).toBe('available');
     if (soyuz?.status !== 'available') return;
     expect(String(soyuz.satellite.noradId)).toHaveLength(6);
@@ -112,10 +114,10 @@ describe('satellite snapshot propagation', () => {
     const oldAt = new Date(Date.parse(`${epoch}Z`) + 80 * 60 * 60 * 1000);
     expect(freshnessForAge(elementAgeMs(epoch, staleAt))).toBe('stale');
     expect(freshnessForAge(elementAgeMs(epoch, oldAt))).toBe('unavailable');
-    const stale = calculateSatellites(la, staleAt).find((item) => (item.status === 'available' ? item.satellite.noradId : item.noradId) === 25544);
+    const stale = calculateSatellites(la, staleAt, reviewedSnapshot).find((item) => (item.status === 'available' ? item.satellite.noradId : item.noradId) === 25544);
     expect(stale?.status).toBe('available');
     if (stale?.status === 'available') expect(stale.satellite.freshness).toBe('stale');
-    const hidden = calculateSatellites(la, oldAt).find((item) => item.status === 'unavailable' && item.noradId === 25544);
+    const hidden = calculateSatellites(la, oldAt, reviewedSnapshot).find((item) => item.status === 'unavailable' && item.noradId === 25544);
     expect(hidden?.status).toBe('unavailable');
     if (hidden?.status === 'unavailable') expect(hidden.reason).toMatch(/72 hours/);
   });
@@ -212,6 +214,7 @@ describe('connections', () => {
       minElevationDeg: -90,
       selectedId: 'norad-25544',
       places,
+      snapshot: reviewedSnapshot,
     });
     expect(model.effectiveMode).toBe('under-satellite');
     expect(model.anchorKind).toBe('subpoint');
@@ -242,18 +245,17 @@ describe('privacy and layout', () => {
     });
   });
 
-  test('wide windows keep the starting list beside the scene and phones stack them', () => {
+  test('wide windows put details beside the view and phones use a bottom sheet', () => {
     const css = readFileSync('styles.css', 'utf8');
-    expect(css).toMatch(/grid-template-columns:\s*320px minmax\(0, 1fr\)/);
-    expect(css).toMatch(/max-width:\s*800px/);
-    expect(css).toMatch(/\.shell\s*\{\s*display:\s*block/);
+    expect(css).toMatch(/\.app\.sheet-open\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\) 400px/);
+    expect(css).toMatch(/\.sheet\s*\{[^}]*max-height:\s*62vh/);
     expect(css).toMatch(/min-height:\s*var\(--sg-touch\)/);
   });
 });
 
 describe('open data funnel', () => {
   test('space and earth records come from the bundled open snapshots', () => {
-    const sky = skyCatalog(cityObserver(cities.la), new Date('2026-10-12T03:30:00.000Z'));
+    const sky = skyCatalog(cityObserver(cities.la), new Date('2026-10-30T12:00:00.000Z'));
     const iss = sky.find((entity) => entity.id === 'norad-25544');
     const jupiter = sky.find((entity) => entity.id === 'jupiter');
     if (!iss || !jupiter) throw new Error('missing sky records');
@@ -273,12 +275,40 @@ describe('open data funnel', () => {
 });
 
 describe('client boundaries', () => {
-  test('application source does not fetch providers or store coordinates', () => {
-    const source = walk('src').filter((file) => file.endsWith('.ts')).map((file) => readFileSync(file, 'utf8')).join('\n');
-    expect(source).not.toMatch(/fetch\s*\(/);
-    expect(source).not.toMatch(/localStorage|sessionStorage|navigator\.geolocation|deviceorientation/i);
-    expect(source).not.toMatch(/data\/sky|demo-iss/);
+  test('application source never contacts providers and never stores coordinates', () => {
+    const files = walk('src').filter((file) => file.endsWith('.ts'));
+    const source = files.map((file) => readFileSync(file, 'utf8')).join('\n');
+    // The only network request is for this site's own published snapshot.
+    const fetchers = files.filter((file) => /fetch\s*\(/.test(readFileSync(file, 'utf8')));
+    expect(fetchers).toEqual([join('src', 'sky', 'live-data.ts')]);
+    expect(readFileSync(join('src', 'sky', 'live-data.ts'), 'utf8')).toMatch(/const PATH = '\.\/data\/gp-catalog\.json'/);
+    expect(source).not.toMatch(/celestrak\.org\/NORAD|ssd-api\.jpl|api\.worldbank|query\.wikidata/);
+    expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie/i);
+    expect(source).not.toMatch(/data\/sky\.js|demo-iss/);
     expect(readFileSync('data/sky.js', 'utf8')).toMatch(/NOT live/);
+  });
+
+  test('location is read in one module, only from a tap, rounded, and kept in memory', () => {
+    const files = walk('src').filter((file) => file.endsWith('.ts'));
+    const users = files.filter((file) => /navigator\.geolocation/.test(readFileSync(file, 'utf8')));
+    expect(users).toEqual([join('src', 'sensors', 'location.ts')]);
+    const location = readFileSync(join('src', 'sensors', 'location.ts'), 'utf8');
+    expect(location).toMatch(/Must be called from a tap/);
+    expect(location).toMatch(/Math\.round\(latitude \* 1000\) \/ 1000/);
+    expect(location).not.toMatch(/watchPosition/);
+  });
+
+  test('motion sensors live in one module and start only from a tap', () => {
+    const files = walk('src').filter((file) => file.endsWith('.ts'));
+    const users = files.filter((file) => /deviceorientation/i.test(readFileSync(file, 'utf8')));
+    expect(users).toEqual([join('src', 'sensors', 'orientation.ts')]);
+    const sensor = readFileSync(join('src', 'sensors', 'orientation.ts'), 'utf8');
+    expect(sensor).toMatch(/requestPermission/);
+    expect(sensor).toMatch(/Must be called from a tap/);
+    const app = readFileSync(join('src', 'ui', 'explore', 'app.ts'), 'utf8');
+    // The only calls to start the sensor are inside click handlers.
+    expect(app.match(/sensor\.start\(\)/g)).toHaveLength(1);
+    expect(app).toMatch(/async function toggleMotion/);
   });
 });
 

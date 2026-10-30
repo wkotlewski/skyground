@@ -1,49 +1,71 @@
-// Manual shared ingestion for the reviewed stations snapshot.
-// One request. A non-200 response or invalid payload exits without replacing the file.
-// Do not run this from a student's browser, and do not add a retry loop.
+// Shared ingestion for the reviewed satellite catalog. Runs on a schedule in CI, never in a student's browser.
+// Requests a few CelesTrak groups plus single catalog numbers, one request at a time, with a pause between.
+// Any non-200 response, invalid payload, missing satellite, or failed check exits without replacing the file.
+// There is no retry loop: the next scheduled run tries again.
 
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const SOURCE_URL = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json';
-const snapshotPath = resolve('data/snapshots/gp-stations.json');
+const BASE = 'https://celestrak.org/NORAD/elements/gp.php';
+const GROUPS = ['stations', 'science', 'gps-ops', 'galileo', 'resource'];
+const PAUSE_MS = 3000;
+const snapshotPath = resolve('data/snapshots/gp-catalog.json');
 const required = ['OBJECT_NAME', 'OBJECT_ID', 'EPOCH', 'MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'NORAD_CAT_ID', 'ELEMENT_SET_NO', 'BSTAR', 'MEAN_MOTION_DOT', 'MEAN_MOTION_DDOT'];
 
-const current = JSON.parse(await readFile(snapshotPath, 'utf8'));
-const allow = new Set(current.records.map((record) => record.NORAD_CAT_ID));
-const response = await fetch(SOURCE_URL);
-if (!response.ok) {
-  console.error(`CelesTrak returned HTTP ${response.status}. The snapshot was left unchanged. No retry.`);
+function stop(message) {
+  console.error(`${message} The snapshot was left unchanged. No retry.`);
   process.exit(1);
 }
-let payload;
-try {
-  payload = await response.json();
-} catch {
-  console.error('CelesTrak did not return JSON. The snapshot was left unchanged. No retry.');
-  process.exit(1);
-}
-if (!Array.isArray(payload)) {
-  console.error('CelesTrak payload was not a list. The snapshot was left unchanged. No retry.');
-  process.exit(1);
-}
-const byId = new Map(payload.filter((record) => record && allow.has(record.NORAD_CAT_ID)).map((record) => [record.NORAD_CAT_ID, record]));
-if (byId.size !== allow.size) {
-  console.error('An allowlisted satellite was missing. The snapshot was left unchanged. No retry.');
-  process.exit(1);
-}
-for (const record of byId.values()) {
-  if (!required.every((key) => record[key] != null && record[key] !== '')) {
-    console.error('A record failed field checks. The snapshot was left unchanged. No retry.');
-    process.exit(1);
+
+async function request(query) {
+  const response = await fetch(`${BASE}?${query}&FORMAT=json`, { headers: { 'user-agent': 'SkyGround shared snapshot (GitHub Actions)' } });
+  if (!response.ok) stop(`CelesTrak returned HTTP ${response.status} for ${query}.`);
+  const text = await response.text();
+  try {
+    const payload = JSON.parse(text);
+    if (!Array.isArray(payload)) stop(`CelesTrak payload for ${query} was not a list.`);
+    return payload;
+  } catch {
+    stop(`CelesTrak did not return JSON for ${query}.`);
   }
 }
+
+const pause = () => new Promise((done) => setTimeout(done, PAUSE_MS));
+
+const current = JSON.parse(await readFile(snapshotPath, 'utf8'));
+const allow = current.records.map((record) => record.NORAD_CAT_ID);
+const previous = new Map(current.records.map((record) => [record.NORAD_CAT_ID, record]));
+const found = new Map();
+
+for (const group of GROUPS) {
+  for (const record of await request(`GROUP=${group}`)) {
+    if (record && allow.includes(record.NORAD_CAT_ID)) found.set(record.NORAD_CAT_ID, record);
+  }
+  await pause();
+}
+for (const id of allow.filter((value) => !found.has(value))) {
+  const [record] = await request(`CATNR=${id}`);
+  if (record && record.NORAD_CAT_ID === id) found.set(id, record);
+  await pause();
+}
+
+if (found.size !== allow.length) {
+  stop(`Missing satellites: ${allow.filter((id) => !found.has(id)).join(', ')}.`);
+}
+for (const record of found.values()) {
+  if (!required.every((key) => record[key] != null && record[key] !== '')) stop(`Record ${record.NORAD_CAT_ID} failed field checks.`);
+  const before = previous.get(record.NORAD_CAT_ID);
+  // A large jump in orbital period usually means a catalog mix-up, not a real change.
+  const change = Math.abs(record.MEAN_MOTION - before.MEAN_MOTION) / before.MEAN_MOTION;
+  if (change > 0.05) stop(`Record ${record.NORAD_CAT_ID} changed its orbit period by more than 5%. Review it by hand.`);
+}
+
 const next = {
   ...current,
-  fetchedAtUtc: new Date().toISOString(),
-  records: [...allow].map((id) => byId.get(id)),
+  fetchedAtUtc: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+  records: allow.map((id) => found.get(id)),
 };
 const temporary = `${snapshotPath}.tmp`;
 await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`);
 await rename(temporary, snapshotPath);
-console.log(`Updated ${byId.size} records. Review the diff before publishing. reviewedAtUtc was not changed.`);
+console.log(`Updated ${found.size} records. The reviewed allowlist was not changed.`);

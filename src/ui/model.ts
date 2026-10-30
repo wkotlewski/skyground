@@ -5,7 +5,7 @@ import type { CuratedPlace } from '../content/places';
 import { findPlaces, groundAnchor } from '../geo';
 import { calculateCelestialBodies } from '../sky/astronomy';
 import { NEAR_OVERHEAD_ELEVATION_DEG } from '../sky/horizon';
-import { calculateSatellites, elementAgeMs, reviewedSnapshot, type SatelliteOutcome } from '../sky/satellites';
+import { calculateSatellites, elementAgeMs, reviewedSnapshot, type GpSnapshot, type SatelliteOutcome } from '../sky/satellites';
 import { formatSelectedTime } from '../sky/time';
 
 export type ConnectionMode = 'near-me' | 'under-satellite' | 'related-interest';
@@ -83,6 +83,7 @@ export interface ModelInput {
   minElevationDeg: number;
   selectedId: string;
   places: CuratedPlace[];
+  snapshot?: GpSnapshot;
 }
 
 function horizonLabel(elevation: number): string {
@@ -141,7 +142,7 @@ export function buildModel(input: ModelInput): AppModel {
   const observer = input.observer ?? cityObserver(input.city);
   const observerName = input.observerName ?? input.city.name;
   const bodies = calculateCelestialBodies(observer, input.atUtc);
-  const satellites = calculateSatellites(observer, input.atUtc);
+  const satellites = calculateSatellites(observer, input.atUtc, input.snapshot);
   const warnings: string[] = [];
   const rows: SkyRow[] = [
     ...bodies.map((body) => ({

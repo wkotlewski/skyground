@@ -1,88 +1,253 @@
 // @vitest-environment happy-dom
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { mountPresentation } from '../src/ui/present/shell';
-import { canUseSubpoint, inArea } from '../src/ui/present/domain';
-import { connectPlaces, contentFor, observerForCity, skyCatalog } from '../src/ui/present/catalog';
+import { mountExplore } from '../src/ui/explore/app';
+import { BelowLookup, findRegion, insideRings, shortExcerpt, type BelowRegion } from '../src/content/below';
+import { computeSky, groundPointOf } from '../src/ui/explore/sky-model';
+import { observerFor, cityById } from '../src/content/world-cities';
+import { canUseSubpoint } from '../src/ui/present/domain';
+import { skyCatalog, observerForCity } from '../src/ui/present/catalog';
+import { reviewedSnapshot } from '../src/sky/satellites';
 
-const at = new Date('2026-10-12T03:30:00.000Z');
+// A time inside the bundled snapshot's freshness window.
+const at = new Date(Date.parse(`${reviewedSnapshot.records[0].EPOCH}Z`) + 2 * 60 * 60 * 1000);
+let app: ReturnType<typeof mountExplore> | null = null;
 
-function click(label: string) {
-  const button = [...document.querySelectorAll('button')].find((node) => node.textContent?.includes(label) && !(node as HTMLButtonElement).disabled);
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${label}`);
-  button.click();
+function click(label: string, scope: ParentNode = document) {
+  const node = [...scope.querySelectorAll('button')].find((item) => item.textContent?.trim().startsWith(label) && !(item as HTMLButtonElement).disabled && !item.closest('[hidden]'));
+  if (!(node instanceof HTMLButtonElement)) throw new Error(`Missing button: ${label}`);
+  node.click();
 }
 
-describe('presentation shell', () => {
-  test('uses the explore layout and calculated records', () => {
-    document.body.innerHTML = '<div id="app"></div>';
-    const root = document.getElementById('app');
-    if (!root) throw new Error('missing app');
-    mountPresentation(root, { at, cityId: 'la' });
+function mount(tab?: 'sky' | 'orbits' | 'earth' | 'list') {
+  document.body.innerHTML = '<div id="app"></div>';
+  app = mountExplore(document.getElementById('app')!, { at, cityId: 'la', tab });
+  return app;
+}
+
+beforeEach(() => {
+  // The page checks its own site for newer satellite data; there is no site in tests.
+  vi.stubGlobal('fetch', async () => new Response('', { status: 404 }));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  app?.destroy();
+  app = null;
+});
+
+describe('explore app', () => {
+  test('opens on the sky with a pointing invitation and asks for nothing until a tap', () => {
+    mount();
     const text = document.body.textContent ?? '';
-    expect(text).toContain('Where will your curiosity take you?');
-    expect(text).toContain('Your window into space');
-    expect(text).toContain('ISS (ZARYA)');
-    expect(text).toContain('NORAD 25544');
-    expect(text).toContain('Selected time');
-    expect(text.toLowerCase()).not.toContain('demo-iss');
-    expect(text.toLowerCase()).not.toContain('illustrative position');
-    expect(text.toLowerCase()).not.toContain('live satellite');
-    expect(document.getElementById('results')?.querySelectorAll('button').length).toBeGreaterThan(3);
+    expect(text).toContain('What’s up there, and what’s below it?');
+    expect(text).toContain('Point my phone');
+    expect(text).toMatch(/stay on your phone and are never saved or shared/);
+    expect(document.getElementById('sky-canvas')).toBeTruthy();
+    expect(document.getElementById('city-button')?.textContent).toBe('Los Angeles');
+    expect(document.querySelector('[data-tab="sky"]')?.getAttribute('aria-pressed')).toBe('true');
+  });
 
-    click('Planets');
-    expect(document.getElementById('results')?.textContent).toContain('Jupiter');
-    expect(document.getElementById('results')?.textContent).not.toContain('ISS (ZARYA)');
-    click('Jupiter');
-    expect(document.getElementById('detail')?.textContent).toContain('142984');
-    const subpoint = document.querySelector<HTMLOptionElement>('#relation option[value="subpoint"]');
-    expect(subpoint?.disabled).toBe(true);
-    expect(document.getElementById('connection-rule')?.textContent).toMatch(/no satellite ground point/i);
-    click('Connect to Earth');
-    expect(document.getElementById('title')?.textContent).toContain('Your world of connections');
-    expect(document.body.textContent).toContain('Griffith Observatory');
+  test('the list shows satellites, planets, and stars with directions and opens a detail card', () => {
+    mount('list');
+    const list = document.getElementById('list-body')!;
+    expect(list.textContent).toContain('International Space Station');
+    expect(list.textContent).toContain('GOES-18 (GOES West)');
+    expect(list.textContent).toContain('Jupiter');
+    expect(list.textContent).toContain('Sirius');
+    expect(list.textContent).toMatch(/Up in your sky/);
+    click('International Space Station', list);
+    const sheet = document.getElementById('sheet')!;
+    expect(sheet.hidden).toBe(false);
+    expect(sheet.textContent).toContain('LEO · Low Earth orbit');
+    expect(sheet.textContent).toContain('What it does');
+    expect(sheet.textContent).toContain('How it connects to the ground');
+    expect(sheet.textContent).toContain('What’s below it right now');
+    expect(sheet.textContent).toMatch(/does not mean the satellite is looking at or photographing/);
+    expect(sheet.textContent).toMatch(/Speed now/);
+  });
 
-    click('Earth');
-    expect(document.getElementById('scene')).toBeTruthy();
-    click('Select area');
-    expect(document.getElementById('area-preset')).toBeTruthy();
-    click('Museums');
-    click('Griffith Observatory');
-    click('Connect to space');
-    expect(document.getElementById('title')?.textContent).toContain('Your window into space');
-    expect(document.getElementById('ground-name')?.textContent).toContain('Griffith Observatory');
-    click('Media & stories');
-    expect(document.getElementById('content')?.textContent).toMatch(/No reviewed photo/);
+  test('planets get an overhead point, never a satellite ground point', () => {
+    mount('list');
+    click('Sun, Moon & planets');
+    click('Jupiter', document.getElementById('list-body')!);
+    const sheet = document.getElementById('sheet')!;
+    expect(sheet.textContent).toContain('Where it’s straight overhead');
+    expect(sheet.textContent).toMatch(/orbits the Sun, not Earth/);
+    expect(sheet.textContent).not.toContain('What’s below it right now');
+  });
+
+  test('orbit cards compare LEO, MEO, GEO, and HEO with live numbers', () => {
+    mount('orbits');
+    const text = document.getElementById('view-orbits')!.textContent ?? '';
+    for (const name of ['Low Earth orbit', 'Medium Earth orbit', 'Geostationary orbit', 'Highly elliptical orbit']) expect(text).toContain(name);
+    expect(text).toContain('GPS III satellite 1');
+    expect(text).toContain('Chandra X-ray Observatory');
+    expect(text).toMatch(/Radio round trip/);
+    click('Show true scale');
+    expect(document.querySelector('.orbit-controls button')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('settings change the city and time without storing anything', () => {
+    mount();
+    click('Los Angeles');
+    const dialog = document.getElementById('settings')!;
+    expect(dialog.hidden).toBe(false);
+    const select = document.getElementById('city-select') as HTMLSelectElement;
+    select.value = 'tokyo';
+    select.dispatchEvent(new Event('change'));
+    click('Done');
+    expect(document.getElementById('city-button')?.textContent).toBe('Tokyo');
+    expect(app!.state.city.lat).toBeCloseTo(35.68);
+  });
+
+  test('pointing needs a tap and falls back to dragging', async () => {
+    mount();
+    expect(app!.state.motion).toBe('off');
+    click('Drag to explore');
+    expect(document.getElementById('intro')?.hidden).toBe(true);
+    expect(document.getElementById('motion-status')?.textContent).toMatch(/Drag to look around/);
   });
 });
 
-describe('presentation data rules', () => {
-  test('keeps planets off a satellite ground point and filters sky areas', () => {
+describe('space first', () => {
+  test('a satellite card shows its picture, a tap-to-play video, and history beneath it', async () => {
+    mount('list');
+    click('International Space Station', document.getElementById('list-body')!);
+    const sheet = document.getElementById('sheet')!;
+    expect(sheet.querySelector('.media-figure img')?.getAttribute('src')).toMatch(/^media\/.+\.webp$/);
+    expect(sheet.querySelector('.media-figure figcaption')?.textContent).toMatch(/Public domain|CC BY/);
+    expect(sheet.querySelector('iframe')).toBeNull();
+    click('', sheet.querySelector('.video-slot')!);
+    expect(sheet.querySelector('iframe')?.getAttribute('src')).toMatch(/^https:\/\/www\.youtube-nocookie\.com\/embed\/D9gUhAOQ0O4/);
+    expect(sheet.textContent).toContain('History beneath it');
+    expect(sheet.textContent).toContain('Yuri Gagarin, first person in space');
+    expect(sheet.textContent).toMatch(/does not mean an object had anything to do/);
+  });
+
+  test('the Moon lists history on the Moon itself, and asteroids list impacts on Earth', () => {
+    mount('list');
+    click('Sun, Moon & planets');
+    click('Moon', document.getElementById('list-body')!);
+    expect(document.getElementById('sheet')!.textContent).toContain('Apollo 11 lands at Tranquility Base');
+    click('Close');
+    click('Asteroids & galaxies');
+    const list = document.getElementById('list-body')!;
+    for (const name of ['Ceres', 'Vesta', 'Bennu', 'Pluto', 'Andromeda Galaxy', 'Crab Nebula']) expect(list.textContent).toContain(name);
+    click('Apophis', list);
+    const sheet = document.getElementById('sheet')!;
+    expect(sheet.textContent).toContain('When space rocks reached the ground');
+    expect(sheet.textContent).toContain('The impact that ended the dinosaurs');
+  });
+});
+
+describe('places beneath', () => {
+  test('tapping a country under a satellite opens its profile, the sky from there, and a timeline', async () => {
+    mount('list');
+    click('International Space Station', document.getElementById('list-body')!);
+    const sheet = document.getElementById('sheet')!;
+    for (let tries = 0; tries < 50 && !sheet.querySelector('.path-chips .chip.land'); tries += 1) await new Promise((done) => setTimeout(done, 50));
+    const chip = sheet.querySelector<HTMLButtonElement>('.path-chips .chip.land');
+    expect(chip).toBeTruthy();
+    chip!.click();
+    const text = sheet.textContent ?? '';
+    expect(text).toContain('Back to International Space Station');
+    expect(text).toContain('Looking up from here right now');
+    expect(text).toContain('Timeline');
+    expect(text).toMatch(/where sky and ground (also )?met/);
+    if (sheet.querySelector('.profile')) expect(sheet.textContent).toMatch(/Life expectancy|People/);
+    click('← Back to International Space Station', sheet);
+    expect(sheet.textContent).toContain('What it does');
+  });
+
+  test('the bundled place pack has World Bank figures and Wikidata timelines for most countries', () => {
+    const pack = JSON.parse(readFileSync('data/places/places.json', 'utf8'));
+    const records = Object.values(pack.places) as Array<{ profile: Record<string, { value: number; year: number }> | null; timeline: unknown[] }>;
+    expect(records.filter((item) => item.profile?.lifeExpectancy).length).toBeGreaterThan(150);
+    expect(records.filter((item) => item.timeline.length).length).toBeGreaterThan(120);
+    expect(pack.places['c-PER'].profile.population.value).toBeGreaterThan(30_000_000);
+  });
+});
+
+describe('space history data', () => {
+  test('every event has a real place, a dated label, an https source, and links to something that exists', async () => {
+    const { SPACE_HISTORY } = await import('../src/content/space-history');
+    const sky = computeSky(observerFor(cityById('la')), at);
+    const ids = new Set(sky.things.map((thing) => thing.id));
+    const kinds = new Set(sky.things.map((thing) => thing.kind as string));
+    for (const event of SPACE_HISTORY) {
+      expect(Math.abs(event.location.lat)).toBeLessThanOrEqual(90);
+      expect(Math.abs(event.location.lon)).toBeLessThanOrEqual(180);
+      expect(event.source).toMatch(/^https:\/\/en\.wikipedia\.org\/wiki\//);
+      expect(event.related.length).toBeGreaterThan(0);
+      for (const target of event.related) expect(ids.has(target) || kinds.has(target), `${event.id} → ${target}`).toBe(true);
+    }
+  });
+});
+
+describe('sky model', () => {
+  test('computes every bundled satellite plus the Sun, Moon, planets, and bright stars', () => {
+    const sky = computeSky(observerFor(cityById('la')), at);
+    expect(sky.hidden).toEqual([]);
+    expect(sky.things.filter((thing) => thing.kind === 'satellite')).toHaveLength(reviewedSnapshot.records.length);
+    expect(sky.things.filter((thing) => thing.kind === 'planet')).toHaveLength(7);
+    expect(sky.things.some((thing) => thing.kind === 'star')).toBe(true);
+    const iss = sky.things.find((thing) => thing.id === 'norad-25544')!;
+    expect(groundPointOf(iss)?.label).toBe('Ground point');
+    const jupiter = sky.things.find((thing) => thing.id === 'jupiter')!;
+    expect(groundPointOf(jupiter)?.label).toBe('Overhead point');
+    expect(jupiter.satellite).toBeUndefined();
+  });
+
+  test('legacy catalog still keeps planets off a satellite ground point', () => {
     const sky = skyCatalog(observerForCity('la'), at);
-    const iss = sky.find((entity) => entity.id === 'norad-25544');
-    const jupiter = sky.find((entity) => entity.id === 'jupiter');
-    if (!iss || !jupiter) throw new Error('missing sky records');
-    expect(canUseSubpoint(iss)).toBe(true);
-    expect(canUseSubpoint(jupiter)).toBe(false);
-    expect(jupiter.groundPoint).toBeUndefined();
-    const nearby = connectPlaces({
-      entity: iss,
-      relation: 'subpoint',
-      interest: 'museums',
-      radiusKm: 100,
-      observer: { lat: 34.05, lon: -118.25 },
-    });
-    expect(nearby).toHaveLength(0);
-    expect(inArea(jupiter, { west: 0, east: 360, south: 0, north: 90 }, 'sky')).toBe(jupiter.sky!.altitudeDeg >= 0);
-    expect(contentFor(jupiter, 'history', '3-5')[0]?.text).toMatch(/not inferred/);
+    expect(canUseSubpoint(sky.find((entity) => entity.id === 'jupiter')!)).toBe(false);
+    expect(canUseSubpoint(sky.find((entity) => entity.id === 'norad-25544')!)).toBe(true);
   });
 });
 
-describe('mobile layout', () => {
-  test('stacks the starting list above the scene', () => {
+describe('what is below', () => {
+  const square: BelowRegion = { id: 'c-SQ', kind: 'country', name: 'Squareland', wikidata: 'Q1', bbox: [0, 0, 10, 10], rings: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[4, 4], [6, 4], [6, 6], [4, 6], [4, 4]]] };
+  const sea: BelowRegion = { id: 'm-0', kind: 'sea', name: 'Test Sea', wikidata: null, bbox: [-20, -20, 20, 20], rings: [[[-20, -20], [20, -20], [20, 20], [-20, 20], [-20, -20]]] };
+
+  test('point-in-polygon respects holes and tests countries before water', () => {
+    expect(insideRings({ lat: 2, lon: 2 }, square.rings)).toBe(true);
+    expect(insideRings({ lat: 5, lon: 5 }, square.rings)).toBe(false);
+    expect(findRegion({ lat: 2, lon: 2 }, [square, sea])?.name).toBe('Squareland');
+    expect(findRegion({ lat: 5, lon: 5 }, [square, sea])?.name).toBe('Test Sea');
+    expect(findRegion({ lat: 50, lon: 50 }, [square, sea])).toBeNull();
+  });
+
+  test('answers open ocean honestly and attaches excerpts with their licence', () => {
+    const lookup = new BelowLookup([square], {
+      retrievedAtUtc: '2026-10-30T00:00:00Z',
+      license: 'CC BY-SA 4.0',
+      licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+      articles: { Q1: { intro: { title: 'Squareland', extract: 'Squareland is a test.', url: 'https://en.wikipedia.org/wiki/Squareland' }, history: null } },
+    });
+    expect(lookup.at({ lat: 2, lon: 2 }).intro?.extract).toBe('Squareland is a test.');
+    expect(lookup.at({ lat: -40, lon: 100 }).kind).toBe('open-ocean');
+    expect(shortExcerpt('One. Two. Three. Four.', 10)).toBe('One. Two.');
+  });
+
+  test('the bundled pack finds real places', () => {
+    const regions = JSON.parse(readFileSync('data/below/regions.json', 'utf8')).regions as BelowRegion[];
+    expect(findRegion({ lat: 34.05, lon: -118.24 }, regions)?.name).toMatch(/United States/);
+    expect(findRegion({ lat: -12.05, lon: -77.04 }, regions)?.name).toBe('Peru');
+    expect(findRegion({ lat: 0, lon: -150 }, regions)?.kind).toBe('ocean');
+    expect(findRegion({ lat: 43, lon: 35 }, regions)?.name).toBe('Black Sea');
+  });
+});
+
+describe('phone layout', () => {
+  test('uses a full-height app with a bottom tab bar, touch-size controls, and a side panel on wide screens', () => {
     const css = readFileSync('styles.css', 'utf8');
-    expect(css).toMatch(/max-width:\s*800px/);
-    expect(css).toMatch(/\.shell\s*\{\s*display:\s*block/);
+    expect(css).toMatch(/\.app\s*\{[^}]*position:\s*fixed/);
+    expect(css).toMatch(/\.tabbar\s*\{/);
     expect(css).toMatch(/min-height:\s*var\(--sg-touch\)/);
+    expect(css).toMatch(/--sg-touch:\s*44px/);
+    expect(css).toMatch(/@media \(min-width: 960px\)/);
+    expect(css).toMatch(/safe-area-inset-bottom/);
+    expect(css).toMatch(/prefers-reduced-motion/);
   });
 });

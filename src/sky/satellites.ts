@@ -12,12 +12,16 @@ import {
   radiansToDegrees,
 } from './satellite-runtime';
 import type { Coordinates, EarthSatellite, LookAngles, Observer, SatelliteProvider, Source } from '../contracts';
-import snapshotJson from '../../data/snapshots/gp-stations.json';
+import snapshotJson from '../../data/snapshots/gp-catalog.json';
 import { normalizeLongitude } from '../geo';
 
 export const SATELLITE_JS_VERSION = '7.1.0';
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 export const UNAVAILABLE_AFTER_MS = 72 * 60 * 60 * 1000;
+/** High orbits (period of 225 minutes or more) drift slowly, so their elements stay useful longer. */
+export const DEEP_SPACE_PERIOD_MIN = 225;
+export const DEEP_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+export const DEEP_UNAVAILABLE_AFTER_MS = 21 * 24 * 60 * 60 * 1000;
 
 const REQUIRED_OMM_KEYS = [
   'OBJECT_NAME',
@@ -68,7 +72,7 @@ export interface GpSnapshot {
 }
 
 export type SatelliteOutcome =
-  | { status: 'available'; satellite: EarthSatellite; internationalDesignator: string; sharesElementsWith: string[]; inclinationDeg: number }
+  | { status: 'available'; satellite: EarthSatellite; internationalDesignator: string; sharesElementsWith: string[]; inclinationDeg: number; record: OmmRecord }
   | {
       status: 'unavailable';
       id: string;
@@ -90,9 +94,10 @@ export function elementAgeMs(epochUtc: string, atUtc: Date): number {
   return Math.abs(atUtc.getTime() - parseEpochUtc(epochUtc).getTime());
 }
 
-export function freshnessForAge(ageMs: number): 'fresh' | 'stale' | 'unavailable' {
-  if (ageMs >= UNAVAILABLE_AFTER_MS) return 'unavailable';
-  if (ageMs >= STALE_AFTER_MS) return 'stale';
+export function freshnessForAge(ageMs: number, periodMin = 0): 'fresh' | 'stale' | 'unavailable' {
+  const deep = periodMin >= DEEP_SPACE_PERIOD_MIN;
+  if (ageMs >= (deep ? DEEP_UNAVAILABLE_AFTER_MS : UNAVAILABLE_AFTER_MS)) return 'unavailable';
+  if (ageMs >= (deep ? DEEP_STALE_AFTER_MS : STALE_AFTER_MS)) return 'stale';
   return 'fresh';
 }
 
@@ -141,6 +146,25 @@ function elementKey(record: OmmRecord): string {
   return [record.EPOCH, record.MEAN_MOTION, record.ECCENTRICITY, record.INCLINATION, record.RA_OF_ASC_NODE, record.ARG_OF_PERICENTER, record.MEAN_ANOMALY, record.BSTAR].join('|');
 }
 
+const sharedCache = new WeakMap<GpSnapshot, Map<string, OmmRecord[]>>();
+
+function sharedElementNames(snapshot: GpSnapshot, record: OmmRecord): string[] {
+  let byKey = sharedCache.get(snapshot);
+  if (!byKey) {
+    byKey = new Map();
+    for (const raw of snapshot.records) {
+      const valid = validateOmm(raw);
+      if (!valid) continue;
+      const key = elementKey(valid);
+      byKey.set(key, [...(byKey.get(key) ?? []), valid]);
+    }
+    sharedCache.set(snapshot, byKey);
+  }
+  return (byKey.get(elementKey(record)) ?? [])
+    .filter((other) => other.NORAD_CAT_ID !== record.NORAD_CAT_ID)
+    .map((other) => String(other.OBJECT_NAME));
+}
+
 function unavailable(record: OmmRecord, snapshot: GpSnapshot, reason: string): SatelliteOutcome {
   return {
     status: 'unavailable',
@@ -168,9 +192,11 @@ export function propagateRecord(record: OmmRecord, observer: Observer, atUtc: Da
     };
   }
   const age = elementAgeMs(validated.EPOCH, atUtc);
-  const freshness = freshnessForAge(age);
+  const periodMin = 1440 / Number(validated.MEAN_MOTION);
+  const freshness = freshnessForAge(age, periodMin);
   if (freshness === 'unavailable') {
-    return unavailable(validated, snapshot, 'Orbital elements are more than 72 hours from the selected time, so no position is shown.');
+    const limit = periodMin >= DEEP_SPACE_PERIOD_MIN ? '21 days' : '72 hours';
+    return unavailable(validated, snapshot, `Orbital elements are more than ${limit} from the selected time, so no position is shown.`);
   }
   let satrec;
   try {
@@ -214,10 +240,7 @@ export function propagateRecord(record: OmmRecord, observer: Observer, atUtc: Da
     aboveHorizon: elevationDeg > 0,
     visibility: 'not-assessed',
   };
-  const sharesElementsWith = snapshot.records
-    .map((other) => validateOmm(other))
-    .filter((other): other is OmmRecord => other != null && other.NORAD_CAT_ID !== validated.NORAD_CAT_ID && elementKey(other) === elementKey(validated))
-    .map((other) => String(other.OBJECT_NAME));
+  const sharesElementsWith = sharedElementNames(snapshot, validated);
   const satellite: EarthSatellite = {
     kind: 'satellite',
     id: `norad-${validated.NORAD_CAT_ID}`,
@@ -237,6 +260,7 @@ export function propagateRecord(record: OmmRecord, observer: Observer, atUtc: Da
     internationalDesignator: String(validated.OBJECT_ID),
     sharesElementsWith,
     inclinationDeg: Number(validated.INCLINATION),
+    record: validated,
   };
 }
 
@@ -249,7 +273,7 @@ export function loadSnapshot(value: unknown = snapshotJson): GpSnapshot {
   return snapshot;
 }
 
-export function calculateSatellites(observer: Observer, atUtc: Date, snapshot: GpSnapshot = loadSnapshot()): SatelliteOutcome[] {
+export function calculateSatellites(observer: Observer, atUtc: Date, snapshot: GpSnapshot = currentSnapshot()): SatelliteOutcome[] {
   if (Number.isNaN(atUtc.getTime())) throw new RangeError('Invalid calculation time');
   return snapshot.records.map((record) => propagateRecord(record, observer, atUtc, snapshot));
 }
@@ -274,4 +298,30 @@ export const satelliteProvider: SatelliteProvider = {
   },
 };
 
+/** The snapshot bundled with this build. */
 export const reviewedSnapshot = loadSnapshot();
+
+let active: GpSnapshot = reviewedSnapshot;
+
+/** The newest snapshot this page has: the bundled one, or a newer copy published to this site since it loaded. */
+export function currentSnapshot(): GpSnapshot {
+  return active;
+}
+
+/**
+ * Swap in a newer snapshot from this site. It must keep the same reviewed allowlist, pass the field checks,
+ * and be newer than the one in use; otherwise it is ignored.
+ */
+export function adoptSnapshot(value: unknown): boolean {
+  let next: GpSnapshot;
+  try {
+    next = loadSnapshot(value);
+  } catch {
+    return false;
+  }
+  if (Date.parse(next.fetchedAtUtc) <= Date.parse(active.fetchedAtUtc)) return false;
+  const allowed = new Set(reviewedSnapshot.records.map((record) => record.NORAD_CAT_ID));
+  if (next.records.length !== allowed.size || !next.records.every((record) => allowed.has(Number(record.NORAD_CAT_ID)) && validateOmm(record))) return false;
+  active = next;
+  return true;
+}
