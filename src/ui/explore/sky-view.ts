@@ -17,6 +17,7 @@ interface Hooks {
   onAim: (thing: SkyThing | null) => void;
   onManualLook: () => void;
   onLookBelow: (below: boolean) => void;
+  onSelectStar: (catalogIndex: number) => void;
 }
 
 const CARDINALS: Array<[number, string]> = [[0, 'N'], [45, 'NE'], [90, 'E'], [135, 'SE'], [180, 'S'], [225, 'SW'], [270, 'W'], [315, 'NW']];
@@ -48,6 +49,7 @@ export class SkyView {
   private pinch: { distance: number; fov: number } | null = null;
   private showStars = true;
   private backdrop: Backdrop | null = null;
+  private named = new Map<number, string>();
   private lookingDown = false;
 
   constructor(canvas: HTMLCanvasElement, hooks: Hooks) {
@@ -84,6 +86,12 @@ export class SkyView {
 
   setBackdrop(backdrop: Backdrop) {
     this.backdrop = backdrop;
+    this.requestDraw();
+  }
+
+  /** Stars people have named: catalogue index → label to show. */
+  setNamedStars(named: Map<number, string>) {
+    this.named = named;
     this.requestDraw();
   }
 
@@ -211,7 +219,27 @@ export class SkyView {
     if (!this.sky) return;
     const direction = unprojectFromScreen(point.x, point.y, this.basis, this.focal(), this.width, this.height);
     const nearest = this.nearest(direction, 4);
-    if (nearest) this.hooks.onSelect(nearest.id);
+    if (nearest) {
+      this.hooks.onSelect(nearest.id);
+      return;
+    }
+    // Any star in the catalogue: the closest dot within a finger's width, favouring brighter stars.
+    const stars = this.backdrop?.stars;
+    if (!stars) return;
+    const f = this.focal();
+    let best = -1;
+    let bestScore = 26;
+    for (let index = 0; index < stars.length; index += 6) {
+      if (stars[index + 5] < 0) continue;
+      const p = projectToScreen([stars[index], stars[index + 1], stars[index + 2]], this.basis, f, this.width, this.height);
+      if (!p) continue;
+      const score = Math.hypot(p.x - point.x, p.y - point.y) + stars[index + 3] * 2;
+      if (score < bestScore) {
+        bestScore = score;
+        best = stars[index + 5];
+      }
+    }
+    if (best >= 0) this.hooks.onSelectStar(best);
   }
 
   private key(event: KeyboardEvent) {
@@ -283,6 +311,7 @@ export class SkyView {
     this.hits = [];
     this.paintSkyAndGround(context);
     this.paintBackdrop(context);
+    this.paintNamed(context);
     this.paintGrid(context);
     this.paintPath(context);
     this.paintThings(context);
@@ -396,7 +425,7 @@ export class SkyView {
     const { forward, right, up } = this.basis;
     const zoomBoost = Math.max(0.8, Math.min(1.6, 75 / this.fovDeg));
     const stars = backdrop.stars;
-    for (let index = 0; index < stars.length; index += 5) {
+    for (let index = 0; index < stars.length; index += 6) {
       const x = stars[index], y = stars[index + 1], z = stars[index + 2];
       const depth = x * forward[0] + y * forward[1] + z * forward[2];
       if (depth <= 0.05) continue;
@@ -416,6 +445,35 @@ export class SkyView {
         context.fill();
       }
     }
+  }
+
+  /** A purple ring and the given name around stars that people have named. */
+  private paintNamed(context: CanvasRenderingContext2D) {
+    const stars = this.backdrop?.stars;
+    if (!stars || !this.named.size) return;
+    const f = this.focal();
+    context.save();
+    context.font = '600 11px system-ui, sans-serif';
+    context.textAlign = 'left';
+    context.textBaseline = 'middle';
+    let labels = 0;
+    for (let index = 0; index < stars.length; index += 6) {
+      const label = this.named.get(stars[index + 5]);
+      if (label === undefined) continue;
+      const p = projectToScreen([stars[index], stars[index + 1], stars[index + 2]], this.basis, f, this.width, this.height);
+      if (!p || p.x < 0 || p.y < 0 || p.x > this.width || p.y > this.height) continue;
+      context.strokeStyle = THEME.accent;
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.arc(p.x, p.y, 7, 0, Math.PI * 2);
+      context.stroke();
+      if (labels < 40 && (this.fovDeg < 70 || labels < 12)) {
+        context.fillStyle = 'rgba(200,175,255,0.95)';
+        context.fillText(label, p.x + 10, p.y);
+        labels += 1;
+      }
+    }
+    context.restore();
   }
 
   private paintGrid(context: CanvasRenderingContext2D) {

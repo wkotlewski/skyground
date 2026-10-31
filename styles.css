@@ -282,3 +282,15 @@ select, input[type="datetime-local"] { min-height: var(--sg-touch); background: 
 .timeline li.sky .kind { color: var(--sg-accent); }
 .card-visual { display: block; width: 100%; height: auto; background: #000; }
 .media-figure.visual figcaption { font-size: 12px; }
+
+/* ---------- Star names ---------- */
+.name-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.name-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--sg-raised); border-radius: 12px; padding: 8px 12px; }
+.name-list li span { display: flex; flex-direction: column; min-width: 0; }
+.name-list li small { color: var(--sg-muted); font-size: 12px; }
+.name-list li.empty { color: var(--sg-muted); }
+.name-form { display: grid; gap: 6px; margin-top: 8px; }
+.name-row { display: flex; gap: 8px; }
+.name-row input { flex: 1; min-width: 0; min-height: var(--sg-touch); background: var(--sg-raised); border: 1px solid var(--sg-border); border-radius: 12px; padding: 0 12px; }
+.find-names { display: flex; gap: 8px; padding: 0 16px 8px; max-width: 760px; }
+.find-names input { flex: 1; min-width: 0; min-height: var(--sg-touch); background: var(--sg-raised); border: 1px solid var(--sg-border); border-radius: 12px; padding: 0 12px; }

@@ -279,8 +279,12 @@ describe('client boundaries', () => {
     const files = walk('src').filter((file) => file.endsWith('.ts'));
     const source = files.map((file) => readFileSync(file, 'utf8')).join('\n');
     // The only network request is for this site's own published snapshot.
-    const fetchers = files.filter((file) => /fetch\s*\(/.test(readFileSync(file, 'utf8')));
-    expect(fetchers).toEqual([join('src', 'sky', 'live-data.ts')]);
+    const fetchers = files.filter((file) => /fetch\s*\(/.test(readFileSync(file, 'utf8'))).sort();
+    expect(fetchers).toEqual([join('src', 'content', 'star-names.ts'), join('src', 'sky', 'live-data.ts')].sort());
+    // Star names go only to the configured SkyGround service, with no cookies.
+    const names = readFileSync(join('src', 'content', 'star-names.ts'), 'utf8');
+    expect(names).toMatch(/STAR_NAMES_API/);
+    expect(names.match(/credentials: 'omit'/g)?.length).toBe(3);
     expect(readFileSync(join('src', 'sky', 'live-data.ts'), 'utf8')).toMatch(/const PATH = '\.\/data\/gp-catalog\.json'/);
     expect(source).not.toMatch(/celestrak\.org\/NORAD|ssd-api\.jpl|api\.worldbank|query\.wikidata/);
     expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie/i);

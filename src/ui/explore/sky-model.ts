@@ -7,6 +7,7 @@ import { distanceFromEarth, overheadFromEqj, overheadPoint } from '../../sky/ove
 import { DEEP_SKY, galacticPlane, raDecVector, type DeepSkyObject } from '../../sky/deep-sky';
 import { SMALL_BODIES, elementAgeDays, geocentricRaDec, horizonFromEqj, plutoPosition, type SmallBody } from '../../sky/small-bodies';
 import starmap from '../../../data/sky/starmap.json';
+import { CATALOG_STRIDE, catalogIfLoaded, catalogKeyForProper, catalogStar } from '../../sky/catalog';
 import { EARTH_RADIUS_KM, orbitFacts, speedKmS, type OrbitFacts } from '../../sky/orbits';
 import { calculateSatellites, currentSnapshot, groundTrack, propagateRecord, type OmmRecord } from '../../sky/satellites';
 import { starOverhead, starPositions, type Star } from '../../sky/stars';
@@ -42,7 +43,7 @@ export interface SkyThing {
   dir: Vec3;
   satellite?: SatelliteInfo;
   body?: BodyInfo;
-  star?: Star & { overhead: Coordinates };
+  star?: Star & { overhead: Coordinates; catalogKey?: string | null; spect?: string; colorIndex?: number };
   small?: { body: SmallBody | null; distanceKm: number; lightMinutes: number; overhead: Coordinates; elementAgeDays: number | null; raDeg: number; decDeg: number };
   deep?: DeepSkyObject & { overhead: Coordinates };
 }
@@ -129,7 +130,7 @@ export function computeSky(observer: Observer, at: Date, includeStars = true): S
         azimuthDeg,
         altitudeDeg,
         dir: directionVector(azimuthDeg, altitudeDeg),
-        star: { ...star, overhead: starOverhead(star, at) },
+        star: { ...star, overhead: starOverhead(star, at), catalogKey: (() => { const catalog = catalogIfLoaded(); return catalog ? catalogKeyForProper(catalog, star.name) : null; })() },
       });
     }
   }
@@ -185,8 +186,24 @@ function smallBodyThings(observer: Observer, at: Date): SkyThing[] {
   return out;
 }
 
+/** Any catalogue star as a card-ready object. */
+export function catalogThing(index: number, observer: Observer, at: Date): SkyThing | null {
+  const catalog = catalogIfLoaded();
+  if (!catalog || index < 0 || index >= catalog.count) return null;
+  const item = catalogStar(catalog, index, observer, at);
+  return {
+    id: `cat-${item.star.id}`,
+    name: item.star.name,
+    kind: 'star',
+    azimuthDeg: item.azimuthDeg,
+    altitudeDeg: item.altitudeDeg,
+    dir: directionVector(item.azimuthDeg, item.altitudeDeg),
+    star: { ...item.star, overhead: item.overhead, catalogKey: item.star.id, spect: item.spect, colorIndex: item.colorIndex },
+  };
+}
+
 export interface Backdrop {
-  /** x, y, z (east, north, up), magnitude, colour index for each star. */
+  /** x, y, z (east, north, up), magnitude, colour index, catalogue index (-1 if none) for each star. */
   stars: Float32Array;
   constellations: Array<{ name: string; rank: number; label: Vec3 | null; lines: Vec3[][] }>;
   milkyWay: Array<{ dir: Vec3; glow: number }>;
@@ -214,11 +231,23 @@ export function computeBackdrop(observer: Observer, at: Date): Backdrop {
     const up = rot[0][2] * v[0] + rot[1][2] * v[1] + rot[2][2] * v[2];
     return [-west, north, up];
   };
-  const stars = new Float32Array(STAR_VECTORS.length * 5);
-  STAR_VECTORS.forEach(([x, y, z, mag, bv], index) => {
-    const local = toLocal([x, y, z]);
-    stars.set([local[0], local[1], local[2], mag, bv], index * 5);
-  });
+  const catalog = catalogIfLoaded();
+  let stars: Float32Array;
+  if (catalog) {
+    // The full naked-eye catalogue: every dot can be tapped and named.
+    stars = new Float32Array(catalog.count * 6);
+    for (let i = 0; i < catalog.count; i += 1) {
+      const o = i * CATALOG_STRIDE;
+      const local = toLocal([catalog.data[o], catalog.data[o + 1], catalog.data[o + 2]]);
+      stars.set([local[0], local[1], local[2], catalog.data[o + 3], catalog.data[o + 4], i], i * 6);
+    }
+  } else {
+    stars = new Float32Array(STAR_VECTORS.length * 6);
+    STAR_VECTORS.forEach(([x, y, z, mag, bv], index) => {
+      const local = toLocal([x, y, z]);
+      stars.set([local[0], local[1], local[2], mag, bv, -1], index * 6);
+    });
+  }
   return {
     stars,
     constellations: CONSTELLATIONS.map((item) => ({

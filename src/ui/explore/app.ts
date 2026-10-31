@@ -11,17 +11,21 @@ import { eventPanel, refreshDetail, regionCard, renderDetail, type DetailContext
 import { SPACE_HISTORY } from '../../content/space-history';
 import { loadPlaces, type PlacePack } from '../../content/place-profiles';
 import { placePanel } from './place-panel';
+import { StarNames } from '../../content/star-names';
+import { catalogIfLoaded, loadCatalog } from '../../sky/catalog';
 import { button, h } from './dom';
 import { EarthView } from './earth-view';
 import { OrbitsView } from './orbits-view';
 import { ORBIT_COLORS } from './palette';
-import { computeBackdrop, computeSky, groundPointOf, groundTrackAround, skyPath, type SkySnapshot, type SkyThing } from './sky-model';
+import { catalogThing, computeBackdrop, computeSky, groundPointOf, groundTrackAround, skyPath, type SkySnapshot, type SkyThing } from './sky-model';
 import { SkyView } from './sky-view';
 
 type Tab = 'sky' | 'orbits' | 'earth' | 'list';
 type ListFilter = 'all' | 'satellite' | 'planet' | 'small' | 'star';
 
 export interface ExploreOptions {
+  /** Override the star names service address (tests and local development). */
+  starNamesApi?: string;
   at?: Date;
   cityId?: string;
   tab?: Tab;
@@ -59,6 +63,8 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     myLocation: null as Observer | null,
     places: null as PlacePack | null,
     placeOpen: null as { point: Coordinates; backId: string } | null,
+    catalogIndex: -1,
+    nameSearch: '',
     backdrop: null as ReturnType<typeof computeBackdrop> | null,
   };
 
@@ -123,6 +129,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
         h('span', { class: 'aim-go' }, 'Learn'),
       );
     },
+    onSelectStar: (index) => selectCatalog(index),
     onLookBelow: (below) => {
       state.lookingDown = below;
       motionStatus.textContent = below ? 'You are looking down through Earth. Faint objects here are below your horizon.' : MOTION_TEXT[state.motion];
@@ -171,6 +178,12 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
 
   // ----- List view -----
   const listFilters = h('div', { class: 'chips', role: 'group', 'aria-label': 'Show' });
+  const nameSearch = h('input', { id: 'name-search', type: 'search', placeholder: 'Find a star by name, like Vega or a name you gave', autocomplete: 'off', 'aria-label': 'Find a star by name' });
+  const nameResults = h('ul', { class: 'rows', id: 'name-results' });
+  nameSearch.addEventListener('input', () => {
+    state.nameSearch = nameSearch.value;
+    renderNameResults();
+  });
   const listBody = h('div', { class: 'list-body', id: 'list-body' });
   const listSection = h('section', { class: 'view list-view', id: 'view-list', 'aria-label': 'List' },
     h('div', { class: 'view-intro' },
@@ -178,9 +191,41 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
       h('p', {}, 'Pick anything up there, even if it is below your horizon, and follow it down to Earth: where it is overhead, what places it passes over, and what happened beneath it.'),
       h('p', { id: 'list-summary', class: 'hint' }, ''),
     ),
+    h('div', { class: 'find-names' }, nameSearch),
+    nameResults,
     listFilters,
     listBody,
   );
+
+  function renderNameResults() {
+    const text = state.nameSearch.trim().toLowerCase();
+    const catalog = catalogIfLoaded();
+    if (text.length < 2 || !catalog) {
+      nameResults.replaceChildren();
+      return;
+    }
+    const rows: HTMLElement[] = [];
+    for (const shared of starNames.search(text, 15)) {
+      const index = catalog.index.get(shared.star);
+      if (index == null) continue;
+      const node = button('', { class: 'row' }, () => selectCatalog(index));
+      node.append(h('span', { class: 'row-main' }, h('strong', {}, shared.name), h('small', {}, `a name someone gave ${catalogStarLabel(index)}`)));
+      rows.push(h('li', {}, node));
+    }
+    for (let index = 0; index < catalog.count && rows.length < 25; index += 1) {
+      const proper = catalog.proper[index];
+      if (!proper || !proper.toLowerCase().includes(text)) continue;
+      const node = button('', { class: 'row' }, () => selectCatalog(index));
+      node.append(h('span', { class: 'row-main' }, h('strong', {}, proper), h('small', {}, `star in ${catalog.constellationNames[catalog.con[index]] ?? catalog.con[index]}`)));
+      rows.push(h('li', {}, node));
+    }
+    nameResults.replaceChildren(...(rows.length ? rows : [h('li', { class: 'hint' }, 'No stars with that name yet.')]));
+  }
+
+  function catalogStarLabel(index: number): string {
+    const catalog = catalogIfLoaded()!;
+    return catalog.proper[index] || catalog.designation[index] || catalog.keys[index].replace('-', ' ').toUpperCase();
+  }
 
   // ----- Sheet, settings, tabs -----
   const sheetBody = h('div', { class: 'sheet-body' });
@@ -220,7 +265,30 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   }
 
   function selectedThing(): SkyThing | null {
+    if (state.selectedId.startsWith('cat-') && state.catalogIndex >= 0) return catalogThing(state.catalogIndex, currentObserver(), state.at);
     return state.sky?.things.find((thing) => thing.id === state.selectedId) ?? null;
+  }
+
+  /** Open any catalogue star. */
+  function selectCatalog(index: number) {
+    const thing = catalogThing(index, currentObserver(), state.at);
+    if (!thing) return;
+    state.catalogIndex = index;
+    select(thing.id);
+  }
+
+  const starNames = new StarNames(options.starNamesApi);
+
+  function updateNamedStars() {
+    const catalog = catalogIfLoaded();
+    if (!catalog) return;
+    const named = new Map<number, string>();
+    for (const [key, names] of starNames.all()) {
+      const index = catalog.index.get(key);
+      if (index == null || !names.length) continue;
+      named.set(index, names.length > 1 ? `${names[0].name} +${names.length - 1}` : names[0].name);
+    }
+    skyView.setNamedStars(named);
   }
 
   function detailContext(): DetailContext {
@@ -242,11 +310,17 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
       onClose: closeSheet,
       onShowPlace: (point) => openPlace(point, state.selectedId),
       sensorOn: state.motion === 'on',
+      starNames,
     };
   }
 
   function select(id: string) {
     state.placeOpen = null;
+    if (!id.startsWith('cat-')) state.catalogIndex = -1;
+    else {
+      const index = catalogIfLoaded()?.index.get(id.slice(4));
+      if (index != null) state.catalogIndex = index;
+    }
     if (id.startsWith('event:')) {
       const event = SPACE_HISTORY.find((item) => `event:${item.id}` === id);
       if (event) {
@@ -340,11 +414,15 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     if (state.placeOpen && state.sheetOpen) {
       sheetBody.replaceChildren(placePanel(state.placeOpen.point, placeContext()));
     } else if (thing && state.sheetOpen) {
-      const scroll = sheetBody.scrollTop;
-      const peek = sheet.classList.contains('peek');
-      sheetBody.replaceChildren(renderDetail(thing, detailContext()));
-      sheetBody.scrollTop = scroll;
-      setPeek(peek);
+      // Swap in only the sections that needed the place data, so nothing the person typed is lost.
+      const fresh = renderDetail(thing, detailContext());
+      const notes = sheetBody.querySelector('.notes');
+      for (const selector of ['.detail-section.below', '.detail-section.history']) {
+        const before = sheetBody.querySelector(selector);
+        const after = fresh.querySelector(selector);
+        if (before && after) before.replaceWith(after);
+        else if (!before && after && notes) notes.before(after);
+      }
     } else if (thing && region) {
       const ground = groundPointOf(thing);
       const section = sheetBody.querySelector<HTMLElement>('.detail-section.below');
@@ -600,6 +678,19 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   recompute();
   setTab(state.tab);
   setMotion('off');
+  void loadCatalog().then(() => {
+    state.backdrop = null;
+    updateNamedStars();
+    paint();
+  });
+  starNames.onChange(() => {
+    updateNamedStars();
+    if (state.nameSearch) renderNameResults();
+  });
+  void starNames.refresh();
+  const namesTimer = setInterval(() => {
+    if (typeof document === 'undefined' || !document.hidden) void starNames.refresh();
+  }, 2 * 60 * 1000);
   const stopFresh = keepSatellitesFresh(() => {
     live.textContent = 'Newer satellite data loaded.';
     refresh();
@@ -620,6 +711,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     state,
     destroy() {
       clearInterval(ticker);
+      clearInterval(namesTimer);
       stopFresh();
       sensor.stop();
     },

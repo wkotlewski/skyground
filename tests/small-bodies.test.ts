@@ -59,7 +59,7 @@ describe('backdrop', async () => {
     const observer = { lat: 34.05, lon: -118.24, heightMeters: 0, locationMode: 'city' as const };
     const at = new Date('2026-10-30T06:00:00Z');
     const backdrop = computeBackdrop(observer, at);
-    expect(backdrop.stars.length / 5).toBeGreaterThan(1500);
+    expect(backdrop.stars.length / 6).toBeGreaterThan(1500);
     // The brightest star in the pack is first: Sirius.
     const [x, y, z] = [backdrop.stars[0], backdrop.stars[1], backdrop.stars[2]];
     const view = horizonFromEqj(raDecVector(101.29, -16.72), observer, at);

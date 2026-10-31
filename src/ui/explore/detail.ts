@@ -10,6 +10,9 @@ import { imageFor } from '../../content/media';
 import { VIDEOS, isVideoId } from '../../content/videos';
 import { button, fmt, h, latLonText, safeHttps } from './dom';
 import { drawnVisual, orbitDiagram } from './visuals';
+import { starColour } from '../../sky/catalog';
+import { NAME_MAX, checkStarName } from '../../content/name-filter';
+import type { StarNames } from '../../content/star-names';
 import { ORBIT_COLORS } from './palette';
 import { MOON_SITES, SPACE_HISTORY, eventsRelatedTo, type SpaceHistoryEvent } from '../../content/space-history';
 import { groundPointOf, upcomingPath, type SkySnapshot, type SkyThing } from './sky-model';
@@ -24,6 +27,7 @@ export interface DetailContext {
   onClose: () => void;
   onShowPlace: (point: Coordinates) => void;
   sensorOn: boolean;
+  starNames: StarNames | null;
 }
 
 const KIND_EYEBROW: Record<string, string> = { planet: 'Planet', sun: 'Our star', moon: 'Earth’s moon', star: 'Star', asteroid: 'Asteroid', 'dwarf-planet': 'Dwarf planet', 'deep-sky': 'Deep sky' };
@@ -49,7 +53,10 @@ export function renderDetail(thing: SkyThing, ctx: DetailContext): HTMLElement {
 
   const root = h('div', { class: 'detail-body' }, head, tags, mediaBlock(thing), skySection(thing, ctx));
   if (sat) root.append(satelliteSections(thing, ctx));
-  else if (thing.star) root.append(starSection(thing, ctx));
+  else if (thing.star) {
+    root.append(starSection(thing, ctx));
+    if (thing.star.catalogKey) root.append(namesSection(thing, ctx));
+  }
   else if (thing.small) root.append(smallSection(thing));
   else if (thing.deep) root.append(deepSection(thing, ctx));
   else root.append(bodySection(thing, ctx));
@@ -227,6 +234,61 @@ function deepSection(thing: SkyThing, ctx: DetailContext): HTMLElement {
   );
 }
 
+/** Names people have given this star, a form to add one, and a way to report one. */
+function namesSection(thing: SkyThing, ctx: DetailContext): HTMLElement {
+  const key = thing.star!.catalogKey!;
+  const catalogueName = key.startsWith('hip-') ? `HIP ${key.slice(4)}` : `HYG ${key.slice(4)}`;
+  const section = h('section', { class: 'detail-section names', id: 'star-names' }, h('h3', {}, 'Names people gave this star'));
+  const service = ctx.starNames;
+  if (!service?.enabled) {
+    section.append(h('p', {}, 'Soon you will be able to give this star a name that everyone using SkyGround can see.'), h('p', { class: 'hint' }, `Astronomers know it as ${thing.name === catalogueName ? catalogueName : `${thing.name} (${catalogueName})`}.`));
+    return section;
+  }
+  const list = h('ul', { class: 'name-list' });
+  const renderList = () => {
+    const names = service.names(key);
+    list.replaceChildren(...(names.length ? names.map((item) => {
+      const report = button('Report', { class: 'chip small', 'aria-label': `Report the name ${item.name}` }, async () => {
+        report.disabled = true;
+        report.textContent = (await service.report(item.id)) ? 'Reported' : 'Try again';
+        if (report.textContent === 'Try again') report.disabled = false;
+      });
+      return h('li', {}, h('span', {}, h('strong', {}, item.name), h('small', {}, `named ${new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`)), report);
+    }) : [h('li', { class: 'empty' }, 'No one has named this star yet. Be the first!')]));
+  };
+  renderList();
+  const input = h('input', { id: 'star-name-input', type: 'text', maxlength: String(NAME_MAX), autocomplete: 'off', placeholder: 'A name for this star', 'aria-describedby': 'star-name-help' });
+  const message = h('p', { class: 'hint', id: 'star-name-message', role: 'status' });
+  const submit = button('Name this star', { class: 'primary', type: 'submit' });
+  const form = h('form', { class: 'name-form' }, h('label', { class: 'field-label', for: 'star-name-input' }, 'Give it a name'), h('div', { class: 'name-row' }, input, submit), message);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const checked = checkStarName(input.value);
+    if (!checked.ok) {
+      message.textContent = checked.reason;
+      return;
+    }
+    submit.disabled = true;
+    message.textContent = 'Adding your name…';
+    const result = await service.addName(key, checked.name);
+    submit.disabled = false;
+    if (result.ok) {
+      input.value = '';
+      message.textContent = `“${result.name.name}” is now on the star map for everyone to see.`;
+      renderList();
+    } else {
+      message.textContent = result.reason;
+    }
+  });
+  section.append(
+    list,
+    form,
+    h('p', { class: 'hint', id: 'star-name-help' }, 'Everyone using SkyGround will see the names you give. Don\u2019t use your full name or anyone\u2019s personal information. Rude names are blocked, and names reported by several people are hidden.'),
+    h('p', { class: 'hint' }, `These are friendly names, just for fun. Astronomers know this star as ${catalogueName}, and only the International Astronomical Union gives official star names.`),
+  );
+  return section;
+}
+
 function starSection(thing: SkyThing, ctx: DetailContext): HTMLElement {
   const star = thing.star!;
   const year = lightLeftYear(star, ctx.sky.at);
@@ -236,6 +298,8 @@ function starSection(thing: SkyThing, ctx: DetailContext): HTMLElement {
     star.lightYears != null
       ? h('p', {}, `It is about ${fmt(star.lightYears, star.lightYears < 20 ? 1 : 0)} light-years away.${year ? ` The light you see tonight left it around ${year}.` : ''}`)
       : h('p', {}, 'Its distance is hundreds of light-years, and estimates differ. The light you see left it centuries ago.'),
+    star.colorIndex != null ? h('p', {}, `It shines ${starColour(star.colorIndex).words}, with a surface around ${fmt(starColour(star.colorIndex).kelvin - 273, 0)} °C${star.spect ? ` (spectral type ${star.spect})` : ''}. The Sun is about 5,500 °C.`) : null,
+    h('p', { class: 'hint' }, `Brightness ${fmt(star.magnitude, 1)} on the magnitude scale, where smaller numbers are brighter. ${star.magnitude <= 2 ? 'Easy to see even from a city.' : star.magnitude <= 4 ? 'Visible from suburbs on a clear night.' : 'Needs a dark sky away from city lights.'}`),
     h('p', { class: 'hint' }, 'Stars are so far away that they barely move against each other in a lifetime. Their daily motion across your sky is Earth turning.'),
   );
 }
