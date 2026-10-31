@@ -76,9 +76,11 @@ describe('catalog coverage', () => {
     expect(freshnessForAge(30 * 24 * 60 * 60 * 1000, 1436)).toBe('unavailable');
   });
 
-  test('every satellite in the bundled snapshot has a position near its epoch', () => {
-    const latestEpoch = Math.max(...reviewedSnapshot.records.map((record) => Date.parse(`${record.EPOCH}Z`)));
-    const outcomes = calculateSatellites(cityObserver(cities.la), new Date(latestEpoch));
+  test('every satellite in the bundled snapshot has a position when it was downloaded', () => {
+    // Use the download time, not the newest epoch: far-out orbits like Chandra's are often published
+    // with an epoch days in the future, which would make every low-orbit craft look too old.
+    const fetchedAt = new Date(reviewedSnapshot.fetchedAtUtc);
+    const outcomes = calculateSatellites(cityObserver(cities.la), fetchedAt);
     expect(outcomes.filter((outcome) => outcome.status !== 'available').map((outcome) => outcome.status === 'unavailable' && outcome.name)).toEqual([]);
   });
 });
