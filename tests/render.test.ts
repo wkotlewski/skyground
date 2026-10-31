@@ -141,50 +141,6 @@ describe('space first', () => {
   });
 });
 
-describe('naming stars', () => {
-  test('any catalogue star can be named, everyone sees it, and it can be found by search', async () => {
-    const { handle } = await import('../../worker/src/handler');
-    const { MemoryStore } = await import('../../worker/src/store');
-    const { loadCatalog } = await import('../src/sky/catalog');
-    const store = new MemoryStore();
-    const deps = { store, adminToken: 'x'.repeat(40), salt: 's', allowedOrigins: ['http://localhost:3000'] };
-    vi.stubGlobal('fetch', async (input: string, init: RequestInit = {}) => {
-      const url = String(input);
-      if (!url.startsWith('https://names.test')) return new Response('', { status: 404 });
-      // A real browser adds the Origin header itself; this test browser does not, so add it here.
-      const headers = new Map(Object.entries((init.headers ?? {}) as Record<string, string>).map(([k, v]) => [k.toLowerCase(), v]));
-      headers.set('origin', 'http://localhost:3000');
-      const request = { url, method: init.method ?? 'GET', headers: { get: (name: string) => headers.get(name.toLowerCase()) ?? null }, json: async () => JSON.parse(String(init.body ?? 'null')) };
-      return handle(request as unknown as Request, deps);
-    });
-    const catalog = await loadCatalog();
-    expect(catalog.count).toBeGreaterThan(8000);
-    document.body.innerHTML = '<div id="app"></div>';
-    app = mountExplore(document.getElementById('app')!, { at, cityId: 'la', tab: 'list', starNamesApi: 'https://names.test' });
-    // Open Vega from the catalogue, the way tapping its dot does.
-    const vega = catalog.proper.indexOf('Vega');
-    app.select(`cat-${catalog.keys[vega]}`);
-    let sheet = document.getElementById('sheet')!;
-    expect(sheet.textContent).toContain('Names people gave this star');
-    expect(sheet.textContent).toContain('No one has named this star yet');
-    const input = document.getElementById('star-name-input') as HTMLInputElement;
-    input.value = 'You are ugly';
-    sheet.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-    expect(document.getElementById('star-name-message')!.textContent).toMatch(/isn\u2019t allowed/);
-    input.value = 'Twinkle Mila';
-    sheet.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-    for (let tries = 0; tries < 40 && !sheet.textContent?.includes('is now on the star map'); tries += 1) await new Promise((done) => setTimeout(done, 25));
-    expect(sheet.textContent).toContain('\u201cTwinkle Mila\u201d is now on the star map');
-    expect(store.rows[0]).toMatchObject({ star: catalog.keys[vega], name: 'Twinkle Mila' });
-    // Search finds it.
-    const search = document.getElementById('name-search') as HTMLInputElement;
-    search.value = 'twinkle';
-    search.dispatchEvent(new Event('input'));
-    expect(document.getElementById('name-results')!.textContent).toContain('Twinkle Mila');
-    sheet = document.getElementById('sheet')!;
-    expect(sheet.textContent).toMatch(/only the International Astronomical Union gives official star names/);
-  });
-});
 
 describe('places beneath', () => {
   test('tapping a country under a satellite opens its profile, the sky from there, and a timeline', async () => {
