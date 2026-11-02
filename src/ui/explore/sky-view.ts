@@ -9,6 +9,7 @@ import {
   type Vec3,
   type ViewBasis,
 } from '../../sensors/orientation';
+import land from '../../../data/world/ne-110m-land.json';
 import type { Backdrop, SkySnapshot, SkyThing } from './sky-model';
 import { ORBIT_COLORS, THEME, auroraGradient } from './palette';
 
@@ -23,15 +24,64 @@ interface Hooks {
 }
 
 const CARDINALS: Array<[number, string]> = [[0, 'North'], [45, 'NE'], [90, 'East'], [135, 'SE'], [180, 'South'], [225, 'SW'], [270, 'West'], [315, 'NW']];
-const GROUND_NEAR = '#252c28';
-const GROUND_FAR = '#0d0f0e';
+/** Land outlines as unit vectors on the globe, built once (Natural Earth 1:110m, public domain). */
+const LAND_RINGS: Float32Array[] = (land as unknown as { rings: Array<Array<[number, number]>> }).rings.map((ring) => {
+  const out = new Float32Array(ring.length * 3);
+  ring.forEach(([lon, lat], i) => {
+    const a = (lat * Math.PI) / 180;
+    const b = (lon * Math.PI) / 180;
+    out[i * 3] = Math.cos(a) * Math.cos(b);
+    out[i * 3 + 1] = Math.cos(a) * Math.sin(b);
+    out[i * 3 + 2] = Math.sin(a);
+  });
+  return out;
+});
 
-/** Gentle made-up hills, in degrees above the horizon, so the ground reads as land rather than a line. */
-export function hillHeight(azimuthDeg: number): number {
-  const a = (azimuthDeg * Math.PI) / 180;
-  return Math.max(0.25, 1.3 + 0.9 * Math.sin(3 * a + 0.4) + 0.55 * Math.sin(7 * a + 1.3) + 0.3 * Math.sin(17 * a + 2.1));
+/**
+ * Where the true horizon touches the screen closest to the centre, and which way is "down to the ground".
+ * Returns null when looking straight up or down (the horizon has no direction on screen).
+ */
+export function horizonTangent(forward: Vec3, right: Vec3, up: Vec3, focal: number, width: number, height: number) {
+  const gx0 = -right[2];
+  const gy0 = up[2];
+  const len = Math.hypot(gx0, gy0);
+  if (len < 1e-4) return null;
+  const gx = gx0 / len;
+  const gy = gy0 / len;
+  const d = (forward[2] * focal) / len;
+  return { x: width / 2 + gx * d, y: height / 2 + gy * d, gx, gy };
 }
+
 const AIM_DEG = 7;
+const PLANET_DEEP = '#0a111b';
+const PLANET_LAND = '#33485a';
+
+/** Fixed pseudo-random rays for the jump streaks: angle, start radius (0–1), colour. */
+const WARP_RAYS: Array<[number, number, string]> = Array.from({ length: 160 }, (_, i) => {
+  const a = Math.sin(i * 12.9898) * 43758.5453;
+  const b = Math.sin(i * 78.233) * 12543.123;
+  const tints = ['245,246,248', '245,246,248', '169,194,255', '154,124,255', '91,157,255', '63,220,170'];
+  return [(a - Math.floor(a)) * Math.PI * 2, 0.08 + (b - Math.floor(b)) * 0.92, tints[i % tints.length]];
+});
+
+function normalize3(v: Vec3): Vec3 {
+  const n = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / n, v[1] / n, v[2] / n];
+}
+
+/** Move along the great circle from a to b; t from 0 to 1. */
+function slerp3(a: Vec3, b: Vec3, angleDeg: number, t: number): Vec3 {
+  const omega = (angleDeg * Math.PI) / 180;
+  if (omega < 1e-4) return b;
+  if (Math.PI - omega < 1e-3) {
+    // Opposite directions: go up and over through the zenith side.
+    const mid: Vec3 = normalize3([0, 0, 1]);
+    return t < 0.5 ? slerp3(a, mid, 90, t * 2) : slerp3(mid, b, 90, (t - 0.5) * 2);
+  }
+  const sa = Math.sin((1 - t) * omega) / Math.sin(omega);
+  const sb = Math.sin(t * omega) / Math.sin(omega);
+  return normalize3([a[0] * sa + b[0] * sb, a[1] * sa + b[1] * sb, a[2] * sa + b[2] * sb]);
+}
 
 /**
  * Sky view. Real calculated directions drawn with a gnomonic (pinhole camera) projection, so the
@@ -48,6 +98,10 @@ export class SkyView {
   private basis: ViewBasis;
   private look = { az: 180, alt: 35 };
   private fovDeg = 75;
+  private flight: { from: Vec3; to: Vec3; angle: number; fov0: number; peak: number; fov1: number; start: number; ms: number; onLand?: () => void } | null = null;
+  private warp = 0;
+  private placeName = '';
+  private flightFrame = 0;
   private sensorDriven = false;
   private width = 0;
   private height = 0;
@@ -83,6 +137,13 @@ export class SkyView {
     canvas.addEventListener('keydown', (event) => this.key(event));
   }
 
+  /** The place name shown next to the You dot on the planet. */
+  setPlaceName(name: string) {
+    if (name === this.placeName) return;
+    this.placeName = name;
+    this.requestDraw();
+  }
+
   setSky(sky: SkySnapshot) {
     this.sky = sky;
     this.requestDraw();
@@ -112,6 +173,7 @@ export class SkyView {
 
   /** Called by the motion sensor. */
   setSensorBasis(basis: ViewBasis) {
+    if (this.flight) this.cancelFlight();
     this.sensorDriven = true;
     this.basis = basis;
     this.requestDraw();
@@ -145,6 +207,88 @@ export class SkyView {
     this.requestDraw();
   }
 
+  /**
+   * Fly to a direction: pull back, swing across the sky with star streaks, then zoom in.
+   * Respects reduced-motion settings by jumping straight there.
+   */
+  flyTo(direction: Vec3, fovEnd: number, onLand?: () => void) {
+    const to = normalize3(direction);
+    const from = this.basis.forward;
+    const angle = (Math.acos(Math.max(-1, Math.min(1, dot(from, to)))) * 180) / Math.PI;
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof requestAnimationFrame !== 'function' || angle < 0.5) {
+      this.lookToward(to, fovEnd);
+      onLand?.();
+      return;
+    }
+    this.cancelFlight();
+    this.sensorDriven = false;
+    const peak = Math.min(115, Math.max(this.fovDeg, fovEnd) + 20 + angle * 0.2);
+    this.flight = { from, to, angle, fov0: this.fovDeg, peak, fov1: fovEnd, start: performance.now(), ms: 1000 + Math.min(1, angle / 150) * 900, onLand };
+    const step = () => {
+      const flight = this.flight;
+      if (!flight) return;
+      const t = Math.min(1, (performance.now() - flight.start) / flight.ms);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const dir = slerp3(flight.from, flight.to, flight.angle, e);
+      const view = azAltFromVector(dir);
+      this.look = { az: view.azimuthDeg, alt: Math.max(-80, Math.min(85, view.altitudeDeg)) };
+      this.basis = basisFromLook(this.look.az, this.look.alt);
+      const half = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+      this.fovDeg = t < 0.5 ? flight.fov0 + (flight.peak - flight.fov0) * half(t * 2) : flight.peak + (flight.fov1 - flight.peak) * half((t - 0.5) * 2);
+      this.warp = Math.pow(Math.sin(Math.PI * t), 1.4) * Math.min(1, 0.35 + flight.angle / 90);
+      this.draw();
+      if (t < 1) {
+        this.flightFrame = requestAnimationFrame(step);
+      } else {
+        this.flight = null;
+        this.warp = 0;
+        this.flightFrame = 0;
+        this.draw();
+        flight.onLand?.();
+      }
+    };
+    this.flightFrame = requestAnimationFrame(step);
+  }
+
+  private cancelFlight() {
+    if (this.flightFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.flightFrame);
+    const landed = this.flight?.onLand;
+    this.flight = null;
+    this.flightFrame = 0;
+    this.warp = 0;
+    landed?.();
+  }
+
+  /** Light-speed streaks radiating from the centre while flying. */
+  private paintWarp(context: CanvasRenderingContext2D) {
+    if (this.warp <= 0.01) return;
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    const reach = Math.hypot(cx, cy);
+    context.save();
+    context.lineCap = 'round';
+    for (let i = 0; i < WARP_RAYS.length; i += 1) {
+      const [angle, r, tint] = WARP_RAYS[i];
+      const r0 = r * reach;
+      const r1 = r0 + (18 + r * 160) * this.warp;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      context.strokeStyle = `rgba(${tint},${0.75 * this.warp})`;
+      context.lineWidth = 0.6 + r * 1.6;
+      context.beginPath();
+      context.moveTo(cx + dx * r0, cy + dy * r0);
+      context.lineTo(cx + dx * r1, cy + dy * r1);
+      context.stroke();
+    }
+    const glow = context.createRadialGradient(cx, cy, 0, cx, cy, reach * 0.6);
+    glow.addColorStop(0, `rgba(169,194,255,${0.12 * this.warp})`);
+    glow.addColorStop(1, 'rgba(169,194,255,0)');
+    context.fillStyle = glow;
+    context.fillRect(0, 0, this.width, this.height);
+    context.restore();
+  }
+
   zoomBy(factor: number) {
     this.fovDeg = Math.max(20, Math.min(120, this.fovDeg * factor));
     this.requestDraw();
@@ -174,6 +318,7 @@ export class SkyView {
   }
 
   private down(event: PointerEvent) {
+    if (this.flight) this.cancelFlight();
     this.pointers.set(event.pointerId, this.point(event));
     try { this.canvas.setPointerCapture(event.pointerId); } catch { /* ignore */ }
     if (this.pointers.size === 1) this.drag = { ...this.point(event), moved: false };
@@ -339,6 +484,7 @@ export class SkyView {
     this.paintThings(context);
     this.paintReticle(context);
     this.paintOffscreenArrow(context);
+    this.paintWarp(context);
   }
 
   private lastView = '';
@@ -367,105 +513,169 @@ export class SkyView {
   }
 
   /**
-   * The ground: everything below the horizon, with low hills on top, drawn over the stars so you can
-   * always tell where Earth is. The horizon is a great circle, so on a pinhole projection it is a
-   * straight line and the ground is one side of it.
+   * Earth as a planet: a big globe whose top edge touches your true horizon right in front of you, with an
+   * atmosphere glow, the real continents (the side of Earth you would see looking ahead and down), and
+   * compass directions along the edge. Stars below the horizon still show faintly through it.
    */
   private paintGround(context: CanvasRenderingContext2D) {
     const f = this.focal();
     const { forward, right, up } = this.basis;
-    const zAt = (x: number, y: number) => forward[2] + ((x - this.width / 2) / f) * right[2] + ((this.height / 2 - y) / f) * up[2];
-    // Screen direction in which "down toward the ground" lies.
-    let gx = -right[2];
-    let gy = up[2];
-    const glen = Math.hypot(gx, gy);
-    if (glen > 1e-6) { gx /= glen; gy /= glen; }
-    const corners: Array<[number, number]> = [[0, 0], [this.width, 0], [this.width, this.height], [0, this.height]];
-    const ground: Array<[number, number]> = [];
-    for (let index = 0; index < corners.length; index += 1) {
-      const a = corners[index];
-      const b = corners[(index + 1) % corners.length];
-      const za = zAt(a[0], a[1]);
-      const zb = zAt(b[0], b[1]);
-      if (za < 0) ground.push(a);
-      if ((za < 0) !== (zb < 0)) {
-        const t = za / (za - zb);
-        ground.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-      }
-    }
-    const edge = ground.filter(([x, y]) => Math.abs(zAt(x, y)) < 1e-6);
-    const anchor = edge.length === 2 ? [(edge[0][0] + edge[1][0]) / 2, (edge[0][1] + edge[1][1]) / 2] : [this.width / 2, this.height / 2];
+    const tangent = horizonTangent(forward, right, up, f, this.width, this.height);
     const reach = Math.max(this.width, this.height);
-    const fill = context.createLinearGradient(anchor[0], anchor[1], anchor[0] + gx * reach, anchor[1] + gy * reach);
-    fill.addColorStop(0, GROUND_NEAR);
-    fill.addColorStop(1, GROUND_FAR);
+    const seeThrough = forward[2] < -0.15;
     context.save();
-    // Solid ground near the horizon; see-through when you look far down through Earth (for example after Jump to).
-    context.globalAlpha = forward[2] < -0.15 ? 0.55 : 0.94;
-    context.fillStyle = fill;
-    if (ground.length >= 3) {
-      context.beginPath();
-      ground.forEach(([x, y], index) => (index ? context.lineTo(x, y) : context.moveTo(x, y)));
-      context.closePath();
-      context.fill();
-    }
-    // Hills: fill each visible stretch down to just below the horizon, then trace the ridge.
-    const ridges: Array<Array<{ x: number; y: number }>> = [];
-    let run: Array<{ top: { x: number; y: number }; base: { x: number; y: number } }> = [];
-    const flush = () => {
-      if (run.length > 1) {
-        context.beginPath();
-        run.forEach(({ top }, i) => (i ? context.lineTo(top.x, top.y) : context.moveTo(top.x, top.y)));
-        for (let i = run.length - 1; i >= 0; i -= 1) context.lineTo(run[i].base.x, run[i].base.y);
-        context.closePath();
-        context.fill();
-        ridges.push(run.map((item) => item.top));
+    if (!tangent) {
+      if (forward[2] < 0) {
+        context.globalAlpha = 0.7;
+        context.fillStyle = PLANET_DEEP;
+        context.fillRect(0, 0, this.width, this.height);
       }
-      run = [];
-    };
-    for (let az = 0; az <= 360; az += 1) {
-      const top = this.project(directionVector(az, hillHeight(az)));
-      const base = this.project(directionVector(az, -0.5));
-      const offscreen = (p: { x: number; y: number }) => Math.abs(p.x - this.width / 2) > 4 * this.width || Math.abs(p.y - this.height / 2) > 4 * this.height;
-      if (!top || !base || offscreen(top) || offscreen(base)) { flush(); continue; }
-      run.push({ top, base });
+      context.restore();
+      return;
     }
-    flush();
-    context.restore();
-    // The aurora gradient glows along the ridge: the one place it shows in the sky.
-    for (const [width, alpha] of [[9, 0.16], [1.5, 0.9]] as const) {
-      context.strokeStyle = auroraGradient(context, 0, 0, this.width, 0, alpha);
-      context.lineWidth = width;
-      context.lineJoin = 'round';
-      for (const ridge of ridges) {
+    const { gx, gy } = tangent;
+    const radius = reach * 1.7;
+    const cx = tangent.x + gx * radius;
+    const cy = tangent.y + gy * radius;
+    // Skip when the whole planet is below the screen.
+    const nearest = Math.hypot(Math.max(0, Math.abs(cx - this.width / 2) - this.width / 2), Math.max(0, Math.abs(cy - this.height / 2) - this.height / 2));
+    const visible = nearest < radius;
+    if (visible) {
+      // Atmosphere: a soft glow just outside the edge.
+      const air = context.createRadialGradient(cx, cy, radius, cx, cy, radius + 46);
+      air.addColorStop(0, 'rgba(91,157,255,0.32)');
+      air.addColorStop(0.35, 'rgba(91,157,255,0.10)');
+      air.addColorStop(1, 'rgba(91,157,255,0)');
+      context.fillStyle = air;
+      context.beginPath();
+      context.arc(cx, cy, radius + 46, 0, Math.PI * 2);
+      context.fill();
+      // The planet body: lighter near the edge, deep toward the middle.
+      const body = context.createRadialGradient(cx, cy, radius * 0.55, cx, cy, radius);
+      body.addColorStop(0, PLANET_DEEP);
+      body.addColorStop(0.9, '#0e1a2a');
+      body.addColorStop(1, '#16304d');
+      context.globalAlpha = seeThrough ? 0.62 : 0.96;
+      context.fillStyle = body;
+      context.beginPath();
+      context.arc(cx, cy, radius, 0, Math.PI * 2);
+      context.fill();
+      // Continents: an orthographic view of Earth with you standing on the top edge, facing into the screen.
+      const obs = this.sky?.observer;
+      if (obs) {
+        const la = (obs.lat * Math.PI) / 180;
+        const lo = (obs.lon * Math.PI) / 180;
+        const view = azAltFromVector(forward);
+        const az = (view.azimuthDeg * Math.PI) / 180;
+        const O: Vec3 = [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)];
+        const E: Vec3 = [-Math.sin(lo), Math.cos(lo), 0];
+        const N: Vec3 = [-Math.sin(la) * Math.cos(lo), -Math.sin(la) * Math.sin(lo), Math.cos(la)];
+        // F: the way you face along the ground. R: your right. The camera floats behind you, so your
+        // own region sits just under the planet's top edge and the far side curves away below.
+        const F: Vec3 = [N[0] * Math.cos(az) + E[0] * Math.sin(az), N[1] * Math.cos(az) + E[1] * Math.sin(az), N[2] * Math.cos(az) + E[2] * Math.sin(az)];
+        const R: Vec3 = [-N[0] * Math.sin(az) + E[0] * Math.cos(az), -N[1] * Math.sin(az) + E[1] * Math.cos(az), -N[2] * Math.sin(az) + E[2] * Math.cos(az)];
+        const tilt = (72 * Math.PI) / 180;
+        const P: Vec3 = [O[0] * Math.cos(tilt) - F[0] * Math.sin(tilt), O[1] * Math.cos(tilt) - F[1] * Math.sin(tilt), O[2] * Math.cos(tilt) - F[2] * Math.sin(tilt)];
+        const U: Vec3 = [O[0] * Math.sin(tilt) + F[0] * Math.cos(tilt), O[1] * Math.sin(tilt) + F[1] * Math.cos(tilt), O[2] * Math.sin(tilt) + F[2] * Math.cos(tilt)];
+        const ux = -gx;
+        const uy = -gy;
+        const rx = -uy;
+        const ry = ux;
+        context.save();
         context.beginPath();
-        ridge.forEach((p, i) => (i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y)));
+        context.arc(cx, cy, radius, 0, Math.PI * 2);
+        context.clip();
+        context.globalAlpha = seeThrough ? 0.5 : 0.9;
+        context.fillStyle = PLANET_LAND;
+        context.strokeStyle = 'rgba(169,194,255,0.55)';
+        context.lineWidth = 1;
+        for (const ring of LAND_RINGS) {
+          context.beginPath();
+          let pen = false;
+          let any = false;
+          for (let i = 0; i < ring.length; i += 3) {
+            const px = ring[i];
+            const py = ring[i + 1];
+            const pz = ring[i + 2];
+            const depth = px * P[0] + py * P[1] + pz * P[2];
+            const x = px * R[0] + py * R[1] + pz * R[2];
+            const y = px * U[0] + py * U[1] + pz * U[2];
+            // Points on the far side are pressed onto the edge so shapes close cleanly.
+            const k = depth < 0 ? 1 / Math.max(1e-6, Math.hypot(x, y)) : 1;
+            const sx = cx + radius * k * (x * rx + y * ux);
+            const sy = cy + radius * k * (x * ry + y * uy);
+            if (depth > 0) any = true;
+            if (pen) context.lineTo(sx, sy);
+            else { context.moveTo(sx, sy); pen = true; }
+          }
+          if (!any) continue;
+          context.closePath();
+          context.fill();
+          context.stroke();
+        }
+        context.restore();
+        // You are here.
+        context.globalAlpha = 1;
+        const youX = cx + radius * Math.sin(tilt) * ux;
+        const youY = cy + radius * Math.sin(tilt) * uy;
+        if (youX > -20 && youX < this.width + 20 && youY > -20 && youY < this.height + 20) {
+          context.fillStyle = 'rgba(245,246,248,0.25)';
+          context.beginPath();
+          context.arc(youX, youY, 10, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = THEME.white;
+          context.beginPath();
+          context.arc(youX, youY, 4, 0, Math.PI * 2);
+          context.fill();
+          context.font = '700 12px system-ui, sans-serif';
+          context.textAlign = 'left';
+          context.textBaseline = 'middle';
+          context.fillText(obs.locationMode === 'device' ? 'You' : `You · ${this.placeName || 'here'}`, youX + 14, youY);
+        }
+      }
+      context.globalAlpha = 1;
+      // The edge of the planet carries the aurora gradient.
+      for (const [width, alpha] of [[8, 0.18], [1.6, 0.95]] as const) {
+        context.strokeStyle = auroraGradient(context, 0, 0, this.width, 0, alpha);
+        context.lineWidth = width;
+        context.beginPath();
+        context.arc(cx, cy, radius, 0, Math.PI * 2);
         context.stroke();
       }
+      // Compass directions sit just inside the edge.
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      for (const [az, label] of CARDINALS) {
+        const p = this.project(directionVector(az, 0));
+        if (!p || p.x < -60 || p.x > this.width + 60 || p.y < -60 || p.y > this.height + 60) continue;
+        // Slide the label from the straight horizon down onto the curved edge.
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        const b = dx * gx + dy * gy;
+        const c = dx * dx + dy * dy - radius * radius;
+        const disc = b * b - c;
+        if (disc < 0) continue;
+        const t = -b + Math.sqrt(disc);
+        const qx = p.x + gx * (t + 18);
+        const qy = p.y + gy * (t + 18);
+        const main = label.length > 2;
+        context.font = `700 ${main ? 15 : 12}px Orbitron, system-ui, sans-serif`;
+        context.fillStyle = main ? THEME.white : THEME.muted;
+        context.fillText(label.toUpperCase(), qx, qy);
+      }
     }
-    // Compass directions sit on the ground, just under the hills.
-    context.textAlign = 'center';
-    context.textBaseline = 'top';
-    for (const [az, label] of CARDINALS) {
-      const p = this.project(directionVector(az, -1.2));
-      if (!p || p.x < -40 || p.x > this.width + 40 || p.y < -20 || p.y > this.height + 20) continue;
-      const main = label.length > 2;
-      context.font = `700 ${main ? 15 : 12}px Orbitron, system-ui, sans-serif`;
-      context.fillStyle = main ? THEME.white : THEME.muted;
-      context.fillText(label.toUpperCase(), p.x, p.y + 4);
-      context.fillRect(p.x - 0.75, p.y - 3, 1.5, 6);
-    }
-    // When the ground is off-screen, point to it.
-    if (ground.length < 3 && forward[2] > 0 && glen > 0.05) {
+    context.restore();
+    // When the planet is off-screen, point to it.
+    if (!visible && forward[2] > 0) {
       const margin = 40;
-      const cx = this.width / 2;
-      const cy = this.height / 2;
-      const scale = Math.min((cx - margin) / Math.abs(gx || 1e-6), (cy - margin) / Math.abs(gy || 1e-6));
-      const x = cx + gx * scale;
-      const y = cy + gy * scale;
-      const band = context.createLinearGradient(cx + gx * (scale - 90), cy + gy * (scale - 90), cx + gx * (scale + margin), cy + gy * (scale + margin));
-      band.addColorStop(0, 'rgba(37,44,40,0)');
-      band.addColorStop(1, 'rgba(37,44,40,0.75)');
+      const mx = this.width / 2;
+      const my = this.height / 2;
+      const scale = Math.min((mx - margin) / Math.abs(gx || 1e-6), (my - margin) / Math.abs(gy || 1e-6));
+      const x = mx + gx * scale;
+      const y = my + gy * scale;
+      const band = context.createLinearGradient(mx + gx * (scale - 90), my + gy * (scale - 90), mx + gx * (scale + margin), my + gy * (scale + margin));
+      band.addColorStop(0, 'rgba(91,157,255,0)');
+      band.addColorStop(1, 'rgba(91,157,255,0.28)');
       context.fillStyle = band;
       context.fillRect(0, 0, this.width, this.height);
       context.save();
@@ -483,7 +693,7 @@ export class SkyView {
       context.fillStyle = THEME.white;
       context.textAlign = 'center';
       context.textBaseline = gy > 0.5 ? 'bottom' : 'top';
-      context.fillText('Ground this way', Math.min(this.width - 60, Math.max(60, x - gx * 14)), y - gy * 16 + (gy > 0.5 ? 0 : 6));
+      context.fillText('Earth this way', Math.min(this.width - 60, Math.max(60, x - gx * 14)), y - gy * 16 + (gy > 0.5 ? 0 : 6));
     }
   }
 

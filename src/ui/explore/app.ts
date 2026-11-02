@@ -466,6 +466,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     const sky = state.sky;
     if (!sky) return;
     cityButton.textContent = state.myLocation ? 'My location' : state.city.name;
+    skyView.setPlaceName(state.myLocation ? '' : state.city.name);
     timeButton.textContent = state.live ? 'Now' : timeLabel(state.at);
     if (state.tab === 'sky') {
       if (!state.backdrop) state.backdrop = computeBackdrop(currentObserver(), state.at);
@@ -759,7 +760,11 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
 
   function jumpTo(target: JumpTarget) {
     if (state.motion === 'on' || state.motion === 'waiting' || state.motion === 'no-compass') stopMotion('off');
-    skyView.lookToward(target.dir, 60);
+    nearbyBar.hidden = true;
+    skyView.flyTo(target.dir, 60, () => showNearby(target));
+  }
+
+  function showNearby(target: JumpTarget) {
     const near = (state.sky?.things ?? [])
       .filter((thing) => thing.id !== target.key)
       .map((thing) => ({ thing, deg: (Math.acos(Math.max(-1, Math.min(1, thing.dir[0] * target.dir[0] + thing.dir[1] * target.dir[1] + thing.dir[2] * target.dir[2]))) * 180) / Math.PI }))

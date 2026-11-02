@@ -262,15 +262,21 @@ describe('finding your way in the sky', () => {
     expect(describeView(10, 88)).toBe('Looking straight up');
   });
 
-  test('hills stay low and above the horizon all the way round', async () => {
-    const { hillHeight } = await import('../src/ui/explore/sky-view');
-    for (let az = 0; az < 360; az += 1) {
-      expect(hillHeight(az)).toBeGreaterThan(0);
-      expect(hillHeight(az)).toBeLessThan(4);
+  test('the planet edge touches the true horizon in front of you', async () => {
+    const { horizonTangent } = await import('../src/ui/explore/sky-view');
+    const { basisFromLook } = await import('../src/sensors/orientation');
+    for (const [az, alt] of [[0, 30], [120, 5], [250, -20], [300, 60]]) {
+      const { forward, right, up } = basisFromLook(az, alt);
+      const f = 300;
+      const t = horizonTangent(forward, right, up, f, 400, 800)!;
+      const z = forward[2] + ((t.x - 200) / f) * right[2] + ((400 - t.y) / f) * up[2];
+      expect(Math.abs(z)).toBeLessThan(1e-9);
     }
+    const { forward, right, up } = basisFromLook(0, 90);
+    expect(horizonTangent(forward, right, up, 300, 400, 800)).toBeNull();
   });
 
-  test('Jump to flies to a planet or constellation and lists what is nearby', () => {
+  test('Jump to flies to a planet or constellation and lists what is nearby', async () => {
     mount('sky');
     click('Jump to');
     const dialog = document.getElementById('jump')!;
@@ -282,6 +288,8 @@ describe('finding your way in the sky', () => {
     click('Orion', dialog);
     expect(dialog.hidden).toBe(true);
     const nearby = document.getElementById('nearby')!;
+    // The view flies there first; the nearby strip appears on landing.
+    for (let tries = 0; tries < 150 && nearby.hidden; tries += 1) await new Promise((done) => setTimeout(done, 25));
     expect(nearby.hidden).toBe(false);
     expect(nearby.textContent).toContain('Near Orion');
     search.value = 'zzzz';
