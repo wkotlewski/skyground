@@ -19,6 +19,7 @@ import { OrbitsView } from './orbits-view';
 import { ORBIT_COLORS } from './palette';
 import { catalogThing, computeBackdrop, computeSky, groundPointOf, groundTrackAround, skyPath, type SkySnapshot, type SkyThing } from './sky-model';
 import { SkyView } from './sky-view';
+import { LEVELS, inLevel, levelInfo, type SkyLevel } from './levels';
 
 type Tab = 'sky' | 'orbits' | 'earth' | 'list';
 type ListFilter = 'all' | 'satellite' | 'planet' | 'small' | 'star';
@@ -51,6 +52,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     motion: 'off' as MotionStatus,
     listFilter: 'all' as ListFilter,
     showStars: true,
+    level: 'all' as SkyLevel,
     sheetOpen: false,
     sky: null as SkySnapshot | null,
     below: null as BelowLookup | null,
@@ -82,6 +84,15 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   const motionStatus = h('p', { class: 'overlay-status', id: 'motion-status', role: 'status' }, MOTION_TEXT.off);
   const viewReadout = h('p', { class: 'view-readout', id: 'view-readout' });
   const nearbyBar = h('div', { class: 'nearby', id: 'nearby', hidden: true });
+  const levelToggle = button('All', { class: 'chip small level-toggle', id: 'level-toggle', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-label': 'Orbit layer: All. Tap to change.' }, () => setLevelMenu(levelToggle.getAttribute('aria-expanded') !== 'true'));
+  const levelButtons = LEVELS.map((level) => button('', { class: 'level-stop', 'data-level': level.id, 'aria-pressed': String(level.id === 'all') }, () => chooseLevel(level.id)));
+  levelButtons.forEach((node, i) => node.append(h('strong', {}, LEVELS[i].label), h('span', {}, LEVELS[i].short)));
+  const levelMenu = h('div', { class: 'level-menu', id: 'level-menu', role: 'group', 'aria-label': 'Choose how far out to look', hidden: true },
+    h('span', { class: 'level-end' }, 'Far from Earth'),
+    ...levelButtons.slice(1),
+    h('span', { class: 'level-end' }, 'Close to Earth'),
+    levelButtons[0],
+  );
   const jumpButton = button('Jump to', { class: 'chip small', id: 'jump-button', 'aria-haspopup': 'dialog' }, () => jump.open());
   const aimChip = button('', { class: 'aim-chip', id: 'aim-chip', hidden: true }, () => {
     const id = aimChip.dataset.id;
@@ -117,9 +128,14 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     h('div', { class: 'zoom-stack' },
       button('+', { class: 'chip small', 'aria-label': 'Zoom in' }, () => skyView.zoomBy(0.83)),
       button('−', { class: 'chip small', 'aria-label': 'Zoom out' }, () => skyView.zoomBy(1.2)),
+      levelToggle,
+      levelMenu,
     ),
     intro,
   );
+  skySection.addEventListener('pointerdown', (event) => {
+    if (!levelMenu.hidden && !levelMenu.contains(event.target as Node) && event.target !== levelToggle) setLevelMenu(false);
+  });
   const skyView = new SkyView(skyCanvas, {
     onSelect: (id) => select(id),
     onAim: (thing) => {
@@ -756,6 +772,32 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
         search.focus();
       },
     };
+  }
+
+  function setLevelMenu(open: boolean) {
+    levelMenu.hidden = !open;
+    levelToggle.setAttribute('aria-expanded', String(open));
+  }
+
+  function chooseLevel(level: SkyLevel) {
+    state.level = level;
+    setLevelMenu(false);
+    for (const node of levelButtons) node.setAttribute('aria-pressed', String(node.dataset.level === level));
+    const info = levelInfo(level);
+    levelToggle.textContent = info.label;
+    levelToggle.classList.toggle('active', level !== 'all');
+    levelToggle.setAttribute('aria-label', `Orbit layer: ${info.label}, ${info.short}. Tap to change.`);
+    skyView.setLevel(level);
+    nearbyBar.hidden = true;
+    aimChip.classList.remove('quiet');
+    if (level === 'all') return;
+    // If nothing from this layer is in view, turn toward the highest one.
+    const things = (state.sky?.things ?? []).filter((thing) => inLevel(thing, level));
+    if (!things.length || things.some((thing) => skyView.inView(thing.dir))) return;
+    const up = things.filter((thing) => thing.altitudeDeg > 0);
+    const target = [...(up.length ? up : things)].sort((a, b) => b.altitudeDeg - a.altitudeDeg)[0];
+    if (state.motion === 'on' || state.motion === 'waiting' || state.motion === 'no-compass') return;
+    skyView.flyTo(target.dir, skyView.fov());
   }
 
   function jumpTo(target: JumpTarget) {

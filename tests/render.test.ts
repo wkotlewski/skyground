@@ -299,3 +299,42 @@ describe('finding your way in the sky', () => {
     expect(document.getElementById('jump-results')!.textContent).toContain('Nothing by that name');
   });
 });
+
+describe('orbit levels in the sky view', () => {
+  test('each layer holds the right kinds of objects', async () => {
+    const { inLevel } = await import('../src/ui/explore/levels');
+    const sky = computeSky(observerFor(cityById('la')), at, true);
+    const sats = sky.things.filter((thing) => thing.satellite);
+    for (const thing of sats) {
+      const cls = thing.satellite!.orbit.orbitClass;
+      expect(inLevel(thing, 'leo')).toBe(cls === 'LEO');
+      expect(inLevel(thing, 'meo')).toBe(cls === 'MEO');
+      expect(inLevel(thing, 'geo')).toBe(cls === 'GEO' || cls === 'GSO' || cls === 'HEO');
+      expect(inLevel(thing, 'planets') || inLevel(thing, 'stars')).toBe(false);
+      expect(inLevel(thing, 'orbits')).toBe(true);
+    }
+    const mars = sky.things.find((thing) => thing.name === 'Mars')!;
+    expect(inLevel(mars, 'planets')).toBe(true);
+    expect(inLevel(mars, 'leo')).toBe(false);
+    expect(inLevel(mars, 'orbits')).toBe(false);
+    expect(sky.things.every((thing) => inLevel(thing, 'all'))).toBe(true);
+  });
+
+  test('the orbit chip says which layer you are in and opens to switch', () => {
+    mount('sky');
+    const toggle = document.getElementById('level-toggle')!;
+    const menu = document.getElementById('level-menu')!;
+    expect(toggle.textContent).toBe('All');
+    expect(menu.hidden).toBe(true);
+    toggle.click();
+    expect(menu.hidden).toBe(false);
+    expect(menu.textContent).toContain('160–2,000 km up');
+    (menu.querySelector('[data-level="leo"]') as HTMLButtonElement).click();
+    expect(menu.hidden).toBe(true);
+    expect(toggle.textContent).toBe('LEO');
+    expect(menu.querySelector('[data-level="leo"]')!.getAttribute('aria-pressed')).toBe('true');
+    toggle.click();
+    (menu.querySelector('[data-level="all"]') as HTMLButtonElement).click();
+    expect(toggle.textContent).toBe('All');
+  });
+});

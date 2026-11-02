@@ -11,6 +11,7 @@ import {
 } from '../../sensors/orientation';
 import land from '../../../data/world/ne-110m-land.json';
 import type { Backdrop, SkySnapshot, SkyThing } from './sky-model';
+import { inLevel, levelInfo, type SkyLevel } from './levels';
 import { ORBIT_COLORS, THEME, auroraGradient } from './palette';
 
 interface Hooks {
@@ -101,6 +102,8 @@ export class SkyView {
   private flight: { from: Vec3; to: Vec3; angle: number; fov0: number; peak: number; fov1: number; start: number; ms: number; onLand?: () => void } | null = null;
   private warp = 0;
   private placeName = '';
+  private level: SkyLevel = 'all';
+  private pulseFrame = 0;
   private flightFrame = 0;
   private sensorDriven = false;
   private width = 0;
@@ -289,6 +292,49 @@ export class SkyView {
     context.restore();
   }
 
+  /** Show one layer of the sky, with a short dive of light streaks as you move between layers. */
+  setLevel(level: SkyLevel) {
+    if (level === this.level) return;
+    const order = ['all', 'stars', 'planets', 'orbits', 'geo', 'meo', 'leo'];
+    const deeper = order.indexOf(level) > order.indexOf(this.level);
+    this.level = level;
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof requestAnimationFrame !== 'function' || this.flight) {
+      this.requestDraw();
+      return;
+    }
+    if (this.pulseFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.pulseFrame);
+    const start = performance.now();
+    const base = this.fovDeg;
+    const step = () => {
+      const t = Math.min(1, (performance.now() - start) / 650);
+      const bump = Math.sin(Math.PI * t);
+      this.warp = 0.85 * bump;
+      // Diving toward Earth narrows the view for a moment; climbing out widens it.
+      this.fovDeg = Math.max(20, Math.min(120, base * (1 + (deeper ? -0.18 : 0.18) * bump)));
+      this.draw();
+      if (t < 1) this.pulseFrame = requestAnimationFrame(step);
+      else {
+        this.pulseFrame = 0;
+        this.warp = 0;
+        this.fovDeg = base;
+        this.draw();
+      }
+    };
+    this.pulseFrame = requestAnimationFrame(step);
+  }
+
+  /** Whether a direction is inside the current view. */
+  inView(direction: Vec3): boolean {
+    const p = this.project(direction);
+    return !!p && p.x > 20 && p.x < this.width - 20 && p.y > 20 && p.y < this.height - 20;
+  }
+
+  /** The current field of view in degrees. */
+  fov(): number {
+    return this.fovDeg;
+  }
+
   zoomBy(factor: number) {
     this.fovDeg = Math.max(20, Math.min(120, this.fovDeg * factor));
     this.requestDraw();
@@ -389,6 +435,7 @@ export class SkyView {
       return;
     }
     // Any star in the catalogue: the closest dot within a finger's width, favouring brighter stars.
+    if (this.level !== 'all' && this.level !== 'stars') return;
     const stars = this.backdrop?.stars;
     if (!stars) return;
     const f = this.focal();
@@ -447,7 +494,7 @@ export class SkyView {
 
   private drawable(): SkyThing[] {
     if (!this.sky) return [];
-    return this.sky.things.filter((thing) => this.showStars || thing.kind !== 'star' || thing.id === this.selected);
+    return this.sky.things.filter((thing) => thing.id === this.selected || ((this.showStars || thing.kind !== 'star') && inLevel(thing, this.level)));
   }
 
   private draw() {
@@ -475,7 +522,10 @@ export class SkyView {
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     this.hits = [];
     this.paintSky(context);
+    context.save();
+    context.globalAlpha = levelInfo(this.level).backdrop;
     this.paintBackdrop(context);
+    context.restore();
     this.paintGround(context);
     this.reportView();
     this.paintNamed(context);
