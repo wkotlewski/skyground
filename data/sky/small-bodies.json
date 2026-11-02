@@ -1,7 +1,7 @@
 {
  "source": "NASA JPL Small-Body Database. Osculating heliocentric elements, ecliptic J2000. U.S. Government work, public domain.",
  "sourceUrl": "https://ssd-api.jpl.nasa.gov/doc/sbdb.html",
- "fetchedAtUtc": "2026-10-31T14:45:08Z",
+ "fetchedAtUtc": "2026-11-02T18:52:10Z",
  "bodies": [
   {
    "id": "ceres",
