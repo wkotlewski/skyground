@@ -41,11 +41,11 @@ export function finderChart(raDeg: number, decDeg: number, label: string): HTMLE
     return { x: W / 2 - f * x, y: H / 2 - f * y };
   };
   const sky = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, W * 0.7);
-  sky.addColorStop(0, '#120a26');
+  sky.addColorStop(0, '#0b0e1c');
   sky.addColorStop(1, THEME.skyTop);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = 'rgba(180,140,255,0.35)';
+  ctx.strokeStyle = 'rgba(200,210,235,0.3)';
   ctx.lineWidth = 1;
   for (const constellation of LINES) {
     for (const line of constellation.lines) {
@@ -72,7 +72,7 @@ export function finderChart(raDeg: number, decDeg: number, label: string): HTMLE
   }
   ctx.font = '600 11px Orbitron, system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(200,175,255,0.7)';
+  ctx.fillStyle = 'rgba(169,194,255,0.7)';
   for (const constellation of LINES) {
     if (!constellation.label) continue;
     const p = project(constellation.label[0], constellation.label[1]);

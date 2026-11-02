@@ -10,7 +10,7 @@ import {
   type ViewBasis,
 } from '../../sensors/orientation';
 import type { Backdrop, SkySnapshot, SkyThing } from './sky-model';
-import { ORBIT_COLORS, THEME } from './palette';
+import { ORBIT_COLORS, THEME, auroraGradient } from './palette';
 
 interface Hooks {
   onSelect: (id: string) => void;
@@ -355,7 +355,14 @@ export class SkyView {
       context.fill();
       const edge = ground.filter(([x, y]) => Math.abs(zAt(x, y)) < 1e-6);
       if (edge.length === 2) {
-        context.strokeStyle = THEME.accent;
+        // The horizon is the one place the aurora gradient shows in the sky: a thin glow, then a crisp line.
+        context.strokeStyle = auroraGradient(context, edge[0][0], edge[0][1], edge[1][0], edge[1][1], 0.18);
+        context.lineWidth = 10;
+        context.beginPath();
+        context.moveTo(edge[0][0], edge[0][1]);
+        context.lineTo(edge[1][0], edge[1][1]);
+        context.stroke();
+        context.strokeStyle = auroraGradient(context, edge[0][0], edge[0][1], edge[1][0], edge[1][1], 0.9);
         context.lineWidth = 1.5;
         context.beginPath();
         context.moveTo(edge[0][0], edge[0][1]);
@@ -395,7 +402,7 @@ export class SkyView {
       const piece = band.slice(start, Math.min(band.length, start + chunk + 1));
       const glow = piece.reduce((sum, item) => sum + item.glow, 0) / piece.length;
       const below = piece[Math.floor(piece.length / 2)].dir[2] < 0 ? 0.35 : 1;
-      for (const [width, color, alpha] of [[0.42, '140,100,225', 0.09], [0.16, '215,200,255', 0.07]] as const) {
+      for (const [width, color, alpha] of [[0.42, '120,130,200', 0.08], [0.16, '225,230,245', 0.07]] as const) {
         context.strokeStyle = `rgba(${color},${alpha * glow * below})`;
         context.lineWidth = this.focal() * width;
         this.polyline(context, piece.map((item) => item.dir));
@@ -404,7 +411,7 @@ export class SkyView {
     context.restore();
     // Constellation lines and names.
     if (this.showStars) {
-      context.strokeStyle = 'rgba(180,140,255,0.28)';
+      context.strokeStyle = 'rgba(200,210,235,0.22)';
       context.lineWidth = 1;
       for (const constellation of backdrop.constellations) {
         for (const line of constellation.lines) this.polyline(context, line);
@@ -416,7 +423,7 @@ export class SkyView {
         if (!constellation.label || (constellation.rank > 1 && this.fovDeg > 60)) continue;
         const p = this.project(constellation.label);
         if (!p || p.x < 0 || p.y < 0 || p.x > this.width || p.y > this.height) continue;
-        context.fillStyle = constellation.label[2] < 0 ? 'rgba(180,140,255,0.25)' : 'rgba(200,175,255,0.55)';
+        context.fillStyle = constellation.label[2] < 0 ? 'rgba(200,210,235,0.22)' : 'rgba(220,226,240,0.5)';
         context.fillText(constellation.name.toUpperCase(), p.x, p.y);
       }
     }
@@ -447,7 +454,7 @@ export class SkyView {
     }
   }
 
-  /** A purple ring and the given name around stars that people have named. */
+  /** A soft blue ring and the given name around stars that people have named. */
   private paintNamed(context: CanvasRenderingContext2D) {
     const stars = this.backdrop?.stars;
     if (!stars || !this.named.size) return;
@@ -468,7 +475,7 @@ export class SkyView {
       context.arc(p.x, p.y, 7, 0, Math.PI * 2);
       context.stroke();
       if (labels < 40 && (this.fovDeg < 70 || labels < 12)) {
-        context.fillStyle = 'rgba(200,175,255,0.95)';
+        context.fillStyle = 'rgba(169,194,255,0.95)';
         context.fillText(label, p.x + 10, p.y);
         labels += 1;
       }
@@ -478,7 +485,7 @@ export class SkyView {
 
   private paintGrid(context: CanvasRenderingContext2D) {
     context.lineWidth = 1;
-    context.strokeStyle = 'rgba(180,140,255,0.10)';
+    context.strokeStyle = 'rgba(200,210,235,0.08)';
     for (const alt of [30, 60]) {
       const ring: Vec3[] = [];
       for (let az = 0; az <= 360; az += 3) ring.push(directionVector(az, alt));
@@ -565,8 +572,9 @@ export class SkyView {
   private glyph(context: CanvasRenderingContext2D, thing: SkyThing) {
     if (thing.kind === 'deep-sky') {
       const glow = context.createRadialGradient(0, 0, 1, 0, 0, 12);
-      glow.addColorStop(0, 'rgba(230,215,255,0.95)');
-      glow.addColorStop(1, 'rgba(155,92,255,0)');
+      glow.addColorStop(0, 'rgba(235,240,255,0.95)');
+      glow.addColorStop(0.6, 'rgba(91,157,255,0.25)');
+      glow.addColorStop(1, 'rgba(63,220,170,0)');
       context.fillStyle = glow;
       context.beginPath();
       context.ellipse(0, 0, 13, 8, -0.5, 0, Math.PI * 2);
@@ -647,7 +655,7 @@ export class SkyView {
     const left = Math.max(4, Math.min(this.width - width - 4, x - width / 2));
     const top = y + 16;
     context.globalAlpha = below ? 0.6 : 1;
-    context.fillStyle = selected ? 'rgba(24,12,44,0.94)' : 'rgba(10,10,14,0.72)';
+    context.fillStyle = selected ? 'rgba(14,16,24,0.94)' : 'rgba(8,8,10,0.72)';
     context.strokeStyle = selected ? THEME.accent : 'rgba(250,250,250,0.18)';
     context.lineWidth = 1;
     context.beginPath();

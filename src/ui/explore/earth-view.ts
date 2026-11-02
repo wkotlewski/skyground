@@ -370,11 +370,11 @@ export class EarthView {
       context.globalAlpha = 1;
       this.hits.push({ id: thing.id, x: p.x, y: p.y });
     }
-    // Dated space-history places: small purple diamonds.
+    // Dated space-history places: small blue diamonds.
     for (const event of SPACE_HISTORY) {
       const p = this.project(event.location.lat, event.location.lon);
       if (p.x < -10 || p.y < -10 || p.x > this.width + 10 || p.y > this.height + 10) continue;
-      context.fillStyle = 'rgba(10,6,20,0.85)';
+      context.fillStyle = 'rgba(8,8,12,0.85)';
       context.strokeStyle = THEME.accent;
       context.lineWidth = 1.5;
       context.beginPath();
@@ -447,7 +447,7 @@ export class EarthView {
     const width = context.measureText(label).width + 8;
     const cx = Math.max(width / 2 + 2, Math.min(this.width - width / 2 - 2, x));
     const cy = Math.min(this.height - 17, y);
-    context.fillStyle = 'rgba(10,6,20,0.78)';
+    context.fillStyle = 'rgba(8,8,12,0.78)';
     context.fillRect(cx - width / 2, cy, width, 15);
     context.fillStyle = color;
     context.fillText(label, cx, cy + 2);
