@@ -18,9 +18,19 @@ interface Hooks {
   onManualLook: () => void;
   onLookBelow: (below: boolean) => void;
   onSelectStar: (catalogIndex: number) => void;
+  /** Where the view is pointing, so the page can say it in words. */
+  onView?: (view: { azimuthDeg: number; altitudeDeg: number }) => void;
 }
 
-const CARDINALS: Array<[number, string]> = [[0, 'N'], [45, 'NE'], [90, 'E'], [135, 'SE'], [180, 'S'], [225, 'SW'], [270, 'W'], [315, 'NW']];
+const CARDINALS: Array<[number, string]> = [[0, 'North'], [45, 'NE'], [90, 'East'], [135, 'SE'], [180, 'South'], [225, 'SW'], [270, 'West'], [315, 'NW']];
+const GROUND_NEAR = '#252c28';
+const GROUND_FAR = '#0d0f0e';
+
+/** Gentle made-up hills, in degrees above the horizon, so the ground reads as land rather than a line. */
+export function hillHeight(azimuthDeg: number): number {
+  const a = (azimuthDeg * Math.PI) / 180;
+  return Math.max(0.25, 1.3 + 0.9 * Math.sin(3 * a + 0.4) + 0.55 * Math.sin(7 * a + 1.3) + 0.3 * Math.sin(17 * a + 2.1));
+}
 const AIM_DEG = 7;
 
 /**
@@ -121,6 +131,16 @@ export class SkyView {
   lookAt(thing: SkyThing) {
     if (this.sensorDriven) return;
     this.look = { az: thing.azimuthDeg, alt: Math.max(-80, Math.min(85, thing.altitudeDeg)) };
+    this.basis = basisFromLook(this.look.az, this.look.alt);
+    this.requestDraw();
+  }
+
+  /** Swing the view to a direction, leaving phone-pointing mode. Used by Jump to. */
+  lookToward(direction: Vec3, fovDeg?: number) {
+    const view = azAltFromVector(direction);
+    this.sensorDriven = false;
+    this.look = { az: view.azimuthDeg, alt: Math.max(-80, Math.min(85, view.altitudeDeg)) };
+    if (fovDeg) this.fovDeg = fovDeg;
     this.basis = basisFromLook(this.look.az, this.look.alt);
     this.requestDraw();
   }
@@ -309,8 +329,10 @@ export class SkyView {
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     this.hits = [];
-    this.paintSkyAndGround(context);
+    this.paintSky(context);
     this.paintBackdrop(context);
+    this.paintGround(context);
+    this.reportView();
     this.paintNamed(context);
     this.paintGrid(context);
     this.paintPath(context);
@@ -319,21 +341,45 @@ export class SkyView {
     this.paintOffscreenArrow(context);
   }
 
-  /** The horizon is a great circle, so on a pinhole projection it is a straight line; ground is one side of it. */
-  private paintSkyAndGround(context: CanvasRenderingContext2D) {
+  private lastView = '';
+
+  private reportView() {
+    const [x, y, z] = this.basis.forward;
+    const azimuthDeg = ((Math.atan2(x, y) * 180) / Math.PI + 360) % 360;
+    const altitudeDeg = (Math.asin(Math.max(-1, Math.min(1, z))) * 180) / Math.PI;
+    const key = `${Math.round(azimuthDeg / 5)}|${Math.round(altitudeDeg / 5)}`;
+    if (key === this.lastView) return;
+    this.lastView = key;
+    this.hooks.onView?.({ azimuthDeg, altitudeDeg });
+  }
+
+  private paintSky(context: CanvasRenderingContext2D) {
     const lookingDown = this.basis.forward[2] < -0.05;
     if (lookingDown !== this.lookingDown) {
       this.lookingDown = lookingDown;
       this.hooks.onLookBelow(lookingDown);
     }
-    const f = this.focal();
-    const { forward, right, up } = this.basis;
-    const zAt = (x: number, y: number) => forward[2] + ((x - this.width / 2) / f) * right[2] + ((this.height / 2 - y) / f) * up[2];
     const sky = context.createLinearGradient(0, 0, 0, this.height);
     sky.addColorStop(0, THEME.skyTop);
     sky.addColorStop(1, THEME.skyHorizon);
     context.fillStyle = sky;
     context.fillRect(0, 0, this.width, this.height);
+  }
+
+  /**
+   * The ground: everything below the horizon, with low hills on top, drawn over the stars so you can
+   * always tell where Earth is. The horizon is a great circle, so on a pinhole projection it is a
+   * straight line and the ground is one side of it.
+   */
+  private paintGround(context: CanvasRenderingContext2D) {
+    const f = this.focal();
+    const { forward, right, up } = this.basis;
+    const zAt = (x: number, y: number) => forward[2] + ((x - this.width / 2) / f) * right[2] + ((this.height / 2 - y) / f) * up[2];
+    // Screen direction in which "down toward the ground" lies.
+    let gx = -right[2];
+    let gy = up[2];
+    const glen = Math.hypot(gx, gy);
+    if (glen > 1e-6) { gx /= glen; gy /= glen; }
     const corners: Array<[number, number]> = [[0, 0], [this.width, 0], [this.width, this.height], [0, this.height]];
     const ground: Array<[number, number]> = [];
     for (let index = 0; index < corners.length; index += 1) {
@@ -347,28 +393,97 @@ export class SkyView {
         ground.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
       }
     }
+    const edge = ground.filter(([x, y]) => Math.abs(zAt(x, y)) < 1e-6);
+    const anchor = edge.length === 2 ? [(edge[0][0] + edge[1][0]) / 2, (edge[0][1] + edge[1][1]) / 2] : [this.width / 2, this.height / 2];
+    const reach = Math.max(this.width, this.height);
+    const fill = context.createLinearGradient(anchor[0], anchor[1], anchor[0] + gx * reach, anchor[1] + gy * reach);
+    fill.addColorStop(0, GROUND_NEAR);
+    fill.addColorStop(1, GROUND_FAR);
+    context.save();
+    // Solid ground near the horizon; see-through when you look far down through Earth (for example after Jump to).
+    context.globalAlpha = forward[2] < -0.15 ? 0.55 : 0.94;
+    context.fillStyle = fill;
     if (ground.length >= 3) {
-      context.fillStyle = THEME.ground;
       context.beginPath();
       ground.forEach(([x, y], index) => (index ? context.lineTo(x, y) : context.moveTo(x, y)));
       context.closePath();
       context.fill();
-      const edge = ground.filter(([x, y]) => Math.abs(zAt(x, y)) < 1e-6);
-      if (edge.length === 2) {
-        // The horizon is the one place the aurora gradient shows in the sky: a thin glow, then a crisp line.
-        context.strokeStyle = auroraGradient(context, edge[0][0], edge[0][1], edge[1][0], edge[1][1], 0.18);
-        context.lineWidth = 10;
+    }
+    // Hills: fill each visible stretch down to just below the horizon, then trace the ridge.
+    const ridges: Array<Array<{ x: number; y: number }>> = [];
+    let run: Array<{ top: { x: number; y: number }; base: { x: number; y: number } }> = [];
+    const flush = () => {
+      if (run.length > 1) {
         context.beginPath();
-        context.moveTo(edge[0][0], edge[0][1]);
-        context.lineTo(edge[1][0], edge[1][1]);
-        context.stroke();
-        context.strokeStyle = auroraGradient(context, edge[0][0], edge[0][1], edge[1][0], edge[1][1], 0.9);
-        context.lineWidth = 1.5;
+        run.forEach(({ top }, i) => (i ? context.lineTo(top.x, top.y) : context.moveTo(top.x, top.y)));
+        for (let i = run.length - 1; i >= 0; i -= 1) context.lineTo(run[i].base.x, run[i].base.y);
+        context.closePath();
+        context.fill();
+        ridges.push(run.map((item) => item.top));
+      }
+      run = [];
+    };
+    for (let az = 0; az <= 360; az += 1) {
+      const top = this.project(directionVector(az, hillHeight(az)));
+      const base = this.project(directionVector(az, -0.5));
+      const offscreen = (p: { x: number; y: number }) => Math.abs(p.x - this.width / 2) > 4 * this.width || Math.abs(p.y - this.height / 2) > 4 * this.height;
+      if (!top || !base || offscreen(top) || offscreen(base)) { flush(); continue; }
+      run.push({ top, base });
+    }
+    flush();
+    context.restore();
+    // The aurora gradient glows along the ridge: the one place it shows in the sky.
+    for (const [width, alpha] of [[9, 0.16], [1.5, 0.9]] as const) {
+      context.strokeStyle = auroraGradient(context, 0, 0, this.width, 0, alpha);
+      context.lineWidth = width;
+      context.lineJoin = 'round';
+      for (const ridge of ridges) {
         context.beginPath();
-        context.moveTo(edge[0][0], edge[0][1]);
-        context.lineTo(edge[1][0], edge[1][1]);
+        ridge.forEach((p, i) => (i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y)));
         context.stroke();
       }
+    }
+    // Compass directions sit on the ground, just under the hills.
+    context.textAlign = 'center';
+    context.textBaseline = 'top';
+    for (const [az, label] of CARDINALS) {
+      const p = this.project(directionVector(az, -1.2));
+      if (!p || p.x < -40 || p.x > this.width + 40 || p.y < -20 || p.y > this.height + 20) continue;
+      const main = label.length > 2;
+      context.font = `700 ${main ? 15 : 12}px Orbitron, system-ui, sans-serif`;
+      context.fillStyle = main ? THEME.white : THEME.muted;
+      context.fillText(label.toUpperCase(), p.x, p.y + 4);
+      context.fillRect(p.x - 0.75, p.y - 3, 1.5, 6);
+    }
+    // When the ground is off-screen, point to it.
+    if (ground.length < 3 && forward[2] > 0 && glen > 0.05) {
+      const margin = 40;
+      const cx = this.width / 2;
+      const cy = this.height / 2;
+      const scale = Math.min((cx - margin) / Math.abs(gx || 1e-6), (cy - margin) / Math.abs(gy || 1e-6));
+      const x = cx + gx * scale;
+      const y = cy + gy * scale;
+      const band = context.createLinearGradient(cx + gx * (scale - 90), cy + gy * (scale - 90), cx + gx * (scale + margin), cy + gy * (scale + margin));
+      band.addColorStop(0, 'rgba(37,44,40,0)');
+      band.addColorStop(1, 'rgba(37,44,40,0.75)');
+      context.fillStyle = band;
+      context.fillRect(0, 0, this.width, this.height);
+      context.save();
+      context.translate(x, y);
+      context.rotate(Math.atan2(gy, gx));
+      context.fillStyle = THEME.white;
+      context.beginPath();
+      context.moveTo(12, 0);
+      context.lineTo(-6, -9);
+      context.lineTo(-6, 9);
+      context.closePath();
+      context.fill();
+      context.restore();
+      context.font = '700 12px system-ui, sans-serif';
+      context.fillStyle = THEME.white;
+      context.textAlign = 'center';
+      context.textBaseline = gy > 0.5 ? 'bottom' : 'top';
+      context.fillText('Ground this way', Math.min(this.width - 60, Math.max(60, x - gx * 14)), y - gy * 16 + (gy > 0.5 ? 0 : 6));
     }
   }
 
@@ -496,15 +611,8 @@ export class SkyView {
       for (let alt = 0; alt <= 90; alt += 3) line.push(directionVector(az, alt));
       this.polyline(context, line);
     }
-    context.font = '700 13px Orbitron, system-ui, sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'bottom';
-    for (const [az, label] of CARDINALS) {
-      const p = this.project(directionVector(az, 0));
-      if (!p || p.x < -20 || p.x > this.width + 20 || p.y < -20 || p.y > this.height + 20) continue;
-      context.fillStyle = label === 'N' ? THEME.accent : THEME.muted;
-      context.fillText(label, p.x, p.y - 6);
-    }
     const zenith = this.project([0, 0, 1]);
     if (zenith && zenith.x > 0 && zenith.x < this.width && zenith.y > 0 && zenith.y < this.height) {
       context.fillStyle = THEME.muted;
@@ -655,7 +763,7 @@ export class SkyView {
     const left = Math.max(4, Math.min(this.width - width - 4, x - width / 2));
     const top = y + 16;
     context.globalAlpha = below ? 0.6 : 1;
-    context.fillStyle = selected ? 'rgba(14,16,24,0.94)' : 'rgba(8,8,10,0.72)';
+    context.fillStyle = selected ? 'rgba(36,38,48,0.95)' : 'rgba(28,29,34,0.85)';
     context.strokeStyle = selected ? THEME.accent : 'rgba(250,250,250,0.18)';
     context.lineWidth = 1;
     context.beginPath();

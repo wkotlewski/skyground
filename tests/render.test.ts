@@ -252,3 +252,42 @@ describe('phone layout', () => {
     expect(css).toMatch(/prefers-reduced-motion/);
   });
 });
+
+describe('finding your way in the sky', () => {
+  test('says which way you are facing in words', async () => {
+    const { describeView } = await import('../src/ui/explore/app');
+    expect(describeView(225, 35)).toBe('Facing southwest · 35° above the horizon');
+    expect(describeView(0, 1)).toBe('Facing north · along the horizon');
+    expect(describeView(90, -20)).toBe('Facing east · 20° below the horizon');
+    expect(describeView(10, 88)).toBe('Looking straight up');
+  });
+
+  test('hills stay low and above the horizon all the way round', async () => {
+    const { hillHeight } = await import('../src/ui/explore/sky-view');
+    for (let az = 0; az < 360; az += 1) {
+      expect(hillHeight(az)).toBeGreaterThan(0);
+      expect(hillHeight(az)).toBeLessThan(4);
+    }
+  });
+
+  test('Jump to flies to a planet or constellation and lists what is nearby', () => {
+    mount('sky');
+    click('Jump to');
+    const dialog = document.getElementById('jump')!;
+    expect(dialog.hidden).toBe(false);
+    expect(dialog.textContent).toContain('Mars');
+    const search = document.getElementById('jump-search') as HTMLInputElement;
+    search.value = 'orion';
+    search.dispatchEvent(new Event('input'));
+    click('Orion', dialog);
+    expect(dialog.hidden).toBe(true);
+    const nearby = document.getElementById('nearby')!;
+    expect(nearby.hidden).toBe(false);
+    expect(nearby.textContent).toContain('Near Orion');
+    search.value = 'zzzz';
+    click('Jump to');
+    search.value = 'zzzz';
+    search.dispatchEvent(new Event('input'));
+    expect(document.getElementById('jump-results')!.textContent).toContain('Nothing by that name');
+  });
+});

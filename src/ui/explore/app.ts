@@ -80,6 +80,9 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   const skyCanvas = h('canvas', { id: 'sky-canvas', class: 'sky-canvas', tabindex: '0', 'aria-label': 'Sky view. Use arrow keys to look around and Enter to open the object in the centre. The List tab has the same objects as text.' });
   const motionButton = button('Point my phone', { class: 'primary', id: 'motion-button' }, () => toggleMotion());
   const motionStatus = h('p', { class: 'overlay-status', id: 'motion-status', role: 'status' }, MOTION_TEXT.off);
+  const viewReadout = h('p', { class: 'view-readout', id: 'view-readout' });
+  const nearbyBar = h('div', { class: 'nearby', id: 'nearby', hidden: true });
+  const jumpButton = button('Jump to', { class: 'chip small', id: 'jump-button', 'aria-haspopup': 'dialog' }, () => jump.open());
   const aimChip = button('', { class: 'aim-chip', id: 'aim-chip', hidden: true }, () => {
     const id = aimChip.dataset.id;
     if (id) select(id);
@@ -101,15 +104,19 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   );
   const skySection = h('section', { class: 'view sky-view', id: 'view-sky', 'aria-label': 'Sky' },
     skyCanvas,
-    h('div', { class: 'sky-overlay top' }, motionStatus),
+    h('div', { class: 'sky-overlay top' }, motionStatus, viewReadout),
     h('div', { class: 'sky-overlay bottom' },
+      nearbyBar,
       aimChip,
       h('div', { class: 'sky-controls' },
         motionButton,
+        jumpButton,
         starsToggle,
-        button('−', { class: 'chip small', 'aria-label': 'Zoom out' }, () => skyView.zoomBy(1.2)),
-        button('+', { class: 'chip small', 'aria-label': 'Zoom in' }, () => skyView.zoomBy(0.83)),
       ),
+    ),
+    h('div', { class: 'zoom-stack' },
+      button('+', { class: 'chip small', 'aria-label': 'Zoom in' }, () => skyView.zoomBy(0.83)),
+      button('−', { class: 'chip small', 'aria-label': 'Zoom out' }, () => skyView.zoomBy(1.2)),
     ),
     intro,
   );
@@ -134,7 +141,12 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
       state.lookingDown = below;
       motionStatus.textContent = below ? 'You are looking down through Earth. Faint objects here are below your horizon.' : MOTION_TEXT[state.motion];
     },
+    onView: ({ azimuthDeg, altitudeDeg }) => {
+      viewReadout.textContent = describeView(azimuthDeg, altitudeDeg);
+    },
     onManualLook: () => {
+      nearbyBar.hidden = true;
+      aimChip.classList.remove('quiet');
       if (state.motion === 'on' || state.motion === 'waiting' || state.motion === 'no-compass') stopMotion('off');
     },
   });
@@ -232,6 +244,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   const grip = button('', { class: 'sheet-grip', 'aria-label': 'Show more details', 'aria-expanded': 'true' }, () => setPeek(!sheet.classList.contains('peek')));
   const sheet = h('aside', { class: 'sheet', id: 'sheet', 'aria-label': 'Details', hidden: true }, grip, sheetBody);
   const settings = buildSettings();
+  const jump = buildJump();
   const tabs = h('nav', { class: 'tabbar', 'aria-label': 'Views' },
     ...(['sky', 'orbits', 'earth', 'list'] as Tab[]).map((tab) => {
       const labels: Record<Tab, string> = { sky: 'Sky', orbits: 'Orbits', earth: 'Earth', list: 'Explore' };
@@ -240,7 +253,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   );
   const live = h('p', { class: 'sr-only', 'aria-live': 'polite', id: 'live-region' });
   const views = h('main', { class: 'views', id: 'main' }, skySection, orbitsView.element, earthSection, listSection);
-  root.replaceChildren(h('a', { class: 'skip', href: '#main' }, 'Skip to content'), h('div', { class: 'app' }, topbar, views, sheet, tabs, settings.element, live));
+  root.replaceChildren(h('a', { class: 'skip', href: '#main' }, 'Skip to content'), h('div', { class: 'app' }, topbar, views, sheet, tabs, settings.element, jump.element, live));
 
   // ----- Behaviour -----
   function recompute() {
@@ -662,6 +675,113 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     };
   }
 
+  function buildJump() {
+    const dialog = h('div', { class: 'settings', id: 'jump', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'jump-title', hidden: true });
+    const search = h('input', { id: 'jump-search', type: 'search', placeholder: 'Mars, Orion, ISS, Vega…', autocomplete: 'off', 'aria-label': 'Search for a place in space' });
+    const results = h('div', { class: 'jump-results', id: 'jump-results' });
+    const close = button('Close', { class: 'secondary' }, () => {
+      dialog.hidden = true;
+      jumpButton.focus();
+    });
+    const destinations = (): JumpTarget[] => {
+      const sky = state.sky;
+      const list: JumpTarget[] = [];
+      if (sky) {
+        for (const thing of sky.things) list.push({ key: thing.id, name: thing.name, group: jumpGroup(thing), dir: thing.dir, thing });
+      }
+      state.backdrop ??= computeBackdrop(currentObserver(), state.at);
+      for (const item of state.backdrop.constellations) {
+        if (item.label) list.push({ key: `con-${item.name}`, name: item.name, group: 'Constellations', dir: item.label });
+      }
+      return list;
+    };
+    const render = () => {
+      const text = search.value.trim().toLowerCase();
+      const all = destinations();
+      let picks: JumpTarget[];
+      if (!text) {
+        const featured = new Set(['Orion', 'Ursa Major', 'Cassiopeia', 'Scorpius', 'Cygnus', 'Leo', 'Southern Cross', 'Crux']);
+        picks = all.filter((item) => item.group === 'Sun, Moon & planets' || featured.has(item.name) || ['iss', 'm31', 'sgr-a', 'm42', 'lmc'].some((id) => item.key === id || item.key.endsWith(`-${id}`)) || item.name.startsWith('ISS'));
+      } else {
+        const rank = (item: JumpTarget) => (item.name.toLowerCase() === text ? 0 : item.name.toLowerCase().startsWith(text) ? 1 : 2) + (item.group === 'Constellations' ? 0 : 0.5);
+        picks = all.filter((item) => item.name.toLowerCase().includes(text)).sort((a, b) => rank(a) - rank(b));
+        const catalog = catalogIfLoaded();
+        if (catalog && picks.length < 12) {
+          for (let i = 0; i < catalog.count && picks.length < 12; i += 1) {
+            if (!catalog.proper[i] || !catalog.proper[i].toLowerCase().includes(text)) continue;
+            if (picks.some((item) => item.name === catalog.proper[i])) continue;
+            const thing = catalogThing(i, currentObserver(), state.at);
+            if (thing) picks.push({ key: thing.id, name: thing.name, group: 'Stars', dir: thing.dir, thing });
+          }
+        }
+      }
+      const groups = new Map<string, JumpTarget[]>();
+      for (const item of picks.slice(0, 40)) groups.set(item.group, [...(groups.get(item.group) ?? []), item]);
+      results.replaceChildren(
+        ...(picks.length ? [] : [h('p', { class: 'hint' }, 'Nothing by that name yet. Try a planet, constellation, satellite or star.')]),
+        ...[...groups].map(([group, items]) => h('div', { class: 'jump-group' },
+          h('h3', {}, group),
+          h('div', { class: 'chips' }, ...items.map((item) => {
+            const below = item.dir[2] < 0;
+            return button(item.name + (below ? ' ↓' : ''), { class: 'chip', title: below ? 'Below your horizon right now' : '' }, () => {
+              dialog.hidden = true;
+              jumpTo(item);
+            });
+          })),
+        )),
+      );
+    };
+    search.addEventListener('input', render);
+    dialog.append(h('div', { class: 'settings-panel jump-panel' },
+      h('h2', { id: 'jump-title' }, 'Jump to'),
+      h('p', { class: 'hint' }, 'Fly the view anywhere in space, even if it is below your horizon, and see what is nearby. ↓ means it is under your feet right now.'),
+      search,
+      results,
+      h('p', { class: 'hint' }, 'To stand somewhere else on Earth, tap the city at the top.'),
+      close,
+    ));
+    dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close.click();
+    });
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) close.click();
+    });
+    return {
+      element: dialog,
+      open() {
+        search.value = '';
+        render();
+        dialog.hidden = false;
+        search.focus();
+      },
+    };
+  }
+
+  function jumpTo(target: JumpTarget) {
+    if (state.motion === 'on' || state.motion === 'waiting' || state.motion === 'no-compass') stopMotion('off');
+    skyView.lookToward(target.dir, 60);
+    const near = (state.sky?.things ?? [])
+      .filter((thing) => thing.id !== target.key)
+      .map((thing) => ({ thing, deg: (Math.acos(Math.max(-1, Math.min(1, thing.dir[0] * target.dir[0] + thing.dir[1] * target.dir[1] + thing.dir[2] * target.dir[2]))) * 180) / Math.PI }))
+      .filter((item) => item.deg < 30)
+      .sort((a, b) => a.deg - b.deg)
+      .slice(0, 6);
+    const where = target.dir[2] < 0 ? ' · below your horizon, so you are seeing it through Earth' : '';
+    nearbyBar.replaceChildren(
+      h('div', { class: 'nearby-head' },
+        h('span', {}, h('strong', {}, `Near ${target.name}`), where),
+        button('×', { class: 'nearby-close', 'aria-label': 'Hide nearby' }, () => { nearbyBar.hidden = true; aimChip.classList.remove('quiet'); }),
+      ),
+      h('div', { class: 'nearby-chips' },
+        ...(target.thing ? [button(`About ${target.name}`, { class: 'chip small strong' }, () => select(target.key))] : []),
+        ...near.map(({ thing, deg }) => button(`${thing.name} · ${Math.round(deg)}°`, { class: 'chip small' }, () => select(thing.id))),
+        ...(near.length ? [] : [h('span', { class: 'hint' }, 'Mostly stars here. Tap any dot to learn about it.')]),
+      ),
+    );
+    nearbyBar.hidden = false;
+    aimChip.classList.add('quiet');
+  }
+
   function openSettings() {
     settings.open();
   }
@@ -702,7 +822,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     paint();
   }, 1000);
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && state.sheetOpen && settings.element.hidden) closeSheet();
+    if (event.key === 'Escape' && state.sheetOpen && settings.element.hidden && jump.element.hidden) closeSheet();
   });
 
   return {
@@ -716,6 +836,32 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
       sensor.stop();
     },
   };
+}
+
+interface JumpTarget {
+  key: string;
+  name: string;
+  group: string;
+  dir: [number, number, number];
+  thing?: SkyThing;
+}
+
+function jumpGroup(thing: SkyThing): string {
+  if (thing.kind === 'sun' || thing.kind === 'moon' || thing.kind === 'planet' || thing.kind === 'dwarf-planet') return 'Sun, Moon & planets';
+  if (thing.kind === 'satellite') return 'Satellites';
+  if (thing.kind === 'star') return 'Stars';
+  return 'Asteroids & galaxies';
+}
+
+/** "Facing southwest · 35° up" in plain words, so you always know where you are looking. */
+export function describeView(azimuthDeg: number, altitudeDeg: number): string {
+  const names = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+  const facing = names[Math.round((((azimuthDeg % 360) + 360) % 360) / 45) % 8];
+  const alt = Math.round(altitudeDeg);
+  if (alt >= 80) return 'Looking straight up';
+  if (alt <= -80) return 'Looking straight down at the ground';
+  if (Math.abs(alt) <= 3) return `Facing ${facing} · along the horizon`;
+  return alt > 0 ? `Facing ${facing} · ${alt}° above the horizon` : `Facing ${facing} · ${-alt}° below the horizon`;
 }
 
 function aimSubtitle(thing: SkyThing): string {
