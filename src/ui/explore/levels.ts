@@ -49,3 +49,13 @@ export function inLevel(thing: SkyThing, level: SkyLevel): boolean {
       return thing.satellite?.orbit.orbitClass === 'LEO';
   }
 }
+
+/** The layer an object belongs to, so picking it can switch the view to where it lives. */
+export function levelOf(thing: SkyThing): SkyLevel {
+  const cls = thing.satellite?.orbit.orbitClass;
+  if (cls === 'LEO') return 'leo';
+  if (cls === 'MEO') return 'meo';
+  if (cls) return 'geo';
+  if (thing.kind === 'star' || thing.kind === 'deep-sky') return 'stars';
+  return 'planets';
+}

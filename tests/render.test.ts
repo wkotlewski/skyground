@@ -337,4 +337,52 @@ describe('orbit levels in the sky view', () => {
     (menu.querySelector('[data-level="all"]') as HTMLButtonElement).click();
     expect(toggle.textContent).toBe('All');
   });
+
+  test('jumping to something outside your layer switches to its layer so you can see it', async () => {
+    const { levelOf } = await import('../src/ui/explore/levels');
+    mount('sky');
+    const toggle = document.getElementById('level-toggle')!;
+    const menu = document.getElementById('level-menu')!;
+    toggle.click();
+    (menu.querySelector('[data-level="meo"]') as HTMLButtonElement).click();
+    expect(toggle.textContent).toBe('MEO');
+    click('Jump to');
+    const dialog = document.getElementById('jump')!;
+    const neptune = [...dialog.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Neptune'))!;
+    neptune.click();
+    expect(toggle.textContent).toBe('Planets');
+    const nearby = document.getElementById('nearby')!;
+    for (let tries = 0; tries < 150 && nearby.hidden; tries += 1) await new Promise((done) => setTimeout(done, 25));
+    expect(nearby.textContent).toContain('Near Neptune');
+    // Nearby only lists things you can see in this layer.
+    const sky = app!.state.sky!;
+    for (const chip of nearby.querySelectorAll('.nearby-chips button')) {
+      const name = chip.textContent!.replace(/ · \d+°$/, '');
+      const thing = sky.things.find((t) => t.name === name);
+      if (thing) expect(levelOf(thing)).toBe('planets');
+    }
+    // A constellation is part of the whole sky, so it goes back to All.
+    toggle.click();
+    (menu.querySelector('[data-level="leo"]') as HTMLButtonElement).click();
+    click('Jump to');
+    const search = document.getElementById('jump-search') as HTMLInputElement;
+    search.value = 'orion';
+    search.dispatchEvent(new Event('input'));
+    [...dialog.querySelectorAll('button')].find((b) => /^Orion( ↓)?$/.test(b.textContent ?? ''))!.click();
+    expect(toggle.textContent).toBe('All');
+  });
+
+  test('opening an object from the list while in a layer switches to its layer', () => {
+    mount('sky');
+    const toggle = document.getElementById('level-toggle')!;
+    toggle.click();
+    (document.querySelector('[data-level="leo"]') as HTMLButtonElement).click();
+    const moon = app!.state.sky!.things.find((t) => t.kind === 'moon')!;
+    app!.select(moon.id);
+    expect(toggle.textContent).toBe('Planets');
+    const leo = app!.state.sky!.things.find((t) => t.satellite?.orbit.orbitClass === 'LEO')!;
+    app!.select(leo.id);
+    expect(toggle.textContent).toBe('LEO');
+  });
 });
+

@@ -104,6 +104,7 @@ export class SkyView {
   private placeName = '';
   private level: SkyLevel = 'all';
   private pulseFrame = 0;
+  private pulseBase = 0;
   private flightFrame = 0;
   private sensorDriven = false;
   private width = 0;
@@ -202,6 +203,7 @@ export class SkyView {
 
   /** Swing the view to a direction, leaving phone-pointing mode. Used by Jump to. */
   lookToward(direction: Vec3, fovDeg?: number) {
+    this.stopPulse();
     const view = azAltFromVector(direction);
     this.sensorDriven = false;
     this.look = { az: view.azimuthDeg, alt: Math.max(-80, Math.min(85, view.altitudeDeg)) };
@@ -225,6 +227,7 @@ export class SkyView {
       return;
     }
     this.cancelFlight();
+    this.stopPulse();
     this.sensorDriven = false;
     const peak = Math.min(115, Math.max(this.fovDeg, fovEnd) + 20 + angle * 0.2);
     this.flight = { from, to, angle, fov0: this.fovDeg, peak, fov1: fovEnd, start: performance.now(), ms: 1000 + Math.min(1, angle / 150) * 900, onLand };
@@ -306,6 +309,7 @@ export class SkyView {
     if (this.pulseFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.pulseFrame);
     const start = performance.now();
     const base = this.fovDeg;
+    this.pulseBase = base;
     const step = () => {
       const t = Math.min(1, (performance.now() - start) / 650);
       const bump = Math.sin(Math.PI * t);
@@ -322,6 +326,20 @@ export class SkyView {
       }
     };
     this.pulseFrame = requestAnimationFrame(step);
+  }
+
+  /** End a layer-change pulse early (for example when a flight starts), restoring its zoom. */
+  private stopPulse() {
+    if (!this.pulseFrame) return;
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.pulseFrame);
+    this.pulseFrame = 0;
+    this.warp = 0;
+    this.fovDeg = this.pulseBase;
+  }
+
+  /** The layer being shown. */
+  currentLevel(): SkyLevel {
+    return this.level;
   }
 
   /** Whether a direction is inside the current view. */
@@ -494,7 +512,7 @@ export class SkyView {
 
   private drawable(): SkyThing[] {
     if (!this.sky) return [];
-    return this.sky.things.filter((thing) => thing.id === this.selected || ((this.showStars || thing.kind !== 'star') && inLevel(thing, this.level)));
+    return this.sky.things.filter((thing) => thing.id === this.selected || ((this.showStars || thing.kind !== 'star' || this.level === 'stars') && inLevel(thing, this.level)));
   }
 
   private draw() {
@@ -718,9 +736,11 @@ export class SkyView {
     // When the planet is off-screen, point to it.
     if (!visible && forward[2] > 0) {
       const margin = 40;
+      // Keep clear of the buttons along the bottom of the screen.
+      const bottomMargin = Math.min(this.height / 2 - 20, 190);
       const mx = this.width / 2;
       const my = this.height / 2;
-      const scale = Math.min((mx - margin) / Math.abs(gx || 1e-6), (my - margin) / Math.abs(gy || 1e-6));
+      const scale = Math.min((mx - margin) / Math.abs(gx || 1e-6), (my - (gy > 0 ? bottomMargin : margin)) / Math.abs(gy || 1e-6));
       const x = mx + gx * scale;
       const y = my + gy * scale;
       const band = context.createLinearGradient(mx + gx * (scale - 90), my + gy * (scale - 90), mx + gx * (scale + margin), my + gy * (scale + margin));

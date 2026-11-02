@@ -19,7 +19,7 @@ import { OrbitsView } from './orbits-view';
 import { ORBIT_COLORS } from './palette';
 import { catalogThing, computeBackdrop, computeSky, groundPointOf, groundTrackAround, skyPath, type SkySnapshot, type SkyThing } from './sky-model';
 import { SkyView } from './sky-view';
-import { LEVELS, inLevel, levelInfo, type SkyLevel } from './levels';
+import { LEVELS, inLevel, levelInfo, levelOf, type SkyLevel } from './levels';
 
 type Tab = 'sky' | 'orbits' | 'earth' | 'list';
 type ListFilter = 'all' | 'satellite' | 'planet' | 'small' | 'star';
@@ -366,6 +366,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     recompute();
     const thing = selectedThing();
     if (!thing) return;
+    showLayerOf(thing);
     void ensureBelow();
     openSheet(renderDetail(thing, detailContext()));
     live.textContent = `${thing.name}. ${directionWords(thing.azimuthDeg, thing.altitudeDeg)}.`;
@@ -774,12 +775,22 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     };
   }
 
+  /** If something you pick lives outside the layer you are in, switch to its layer so you can see it. */
+  function showLayerOf(thing: SkyThing | null | undefined) {
+    if (state.level === 'all') return;
+    if (!thing) {
+      chooseLevel('all', { fly: false });
+      return;
+    }
+    if (!inLevel(thing, state.level)) chooseLevel(levelOf(thing), { fly: false });
+  }
+
   function setLevelMenu(open: boolean) {
     levelMenu.hidden = !open;
     levelToggle.setAttribute('aria-expanded', String(open));
   }
 
-  function chooseLevel(level: SkyLevel) {
+  function chooseLevel(level: SkyLevel, options: { fly?: boolean } = {}) {
     state.level = level;
     setLevelMenu(false);
     for (const node of levelButtons) node.setAttribute('aria-pressed', String(node.dataset.level === level));
@@ -790,7 +801,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
     skyView.setLevel(level);
     nearbyBar.hidden = true;
     aimChip.classList.remove('quiet');
-    if (level === 'all') return;
+    if (level === 'all' || options.fly === false) return;
     // If nothing from this layer is in view, turn toward the highest one.
     const things = (state.sky?.things ?? []).filter((thing) => inLevel(thing, level));
     if (!things.length || things.some((thing) => skyView.inView(thing.dir))) return;
@@ -802,13 +813,14 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
 
   function jumpTo(target: JumpTarget) {
     if (state.motion === 'on' || state.motion === 'waiting' || state.motion === 'no-compass') stopMotion('off');
+    showLayerOf(target.thing ?? null);
     nearbyBar.hidden = true;
     skyView.flyTo(target.dir, 60, () => showNearby(target));
   }
 
   function showNearby(target: JumpTarget) {
     const near = (state.sky?.things ?? [])
-      .filter((thing) => thing.id !== target.key)
+      .filter((thing) => thing.id !== target.key && inLevel(thing, state.level))
       .map((thing) => ({ thing, deg: (Math.acos(Math.max(-1, Math.min(1, thing.dir[0] * target.dir[0] + thing.dir[1] * target.dir[1] + thing.dir[2] * target.dir[2]))) * 180) / Math.PI }))
       .filter((item) => item.deg < 30)
       .sort((a, b) => a.deg - b.deg)
