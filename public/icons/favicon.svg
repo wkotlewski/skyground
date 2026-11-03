@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="aurora" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9a7cff"/>
+      <stop offset="0.5" stop-color="#5b9dff"/>
+      <stop offset="1" stop-color="#3fdcaa"/>
+    </linearGradient>
+    <radialGradient id="planet" cx="0.5" cy="0" r="1">
+      <stop offset="0" stop-color="#1d3a5c"/>
+      <stop offset="0.6" stop-color="#0e1a2a"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="1" r="0.6">
+      <stop offset="0" stop-color="#5b9dff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#5b9dff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile"><rect width="64" height="64" rx="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="64" height="64" fill="#030304"/>
+    <ellipse cx="32" cy="46" rx="40" ry="16" fill="url(#glow)"/>
+    <circle cx="32" cy="100" r="58" fill="url(#planet)"/>
+    <circle cx="32" cy="100" r="58" fill="none" stroke="url(#aurora)" stroke-width="3"/>
+    <!-- orbit arc -->
+    <path d="M6 40 C 14 14, 50 14, 58 40" fill="none" stroke="#f5f6f8" stroke-opacity="0.35" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <!-- satellite: body and panels -->
+    <g transform="translate(44 19) rotate(-25)">
+      <rect x="-9" y="-2.2" width="6" height="4.4" rx="0.8" fill="#a9c2ff"/>
+      <rect x="3" y="-2.2" width="6" height="4.4" rx="0.8" fill="#a9c2ff"/>
+      <rect x="-2.6" y="-3" width="5.2" height="6" rx="1.2" fill="#f5f6f8"/>
+    </g>
+    <!-- star -->
+    <path d="M17 13 L18.4 17.6 L23 19 L18.4 20.4 L17 25 L15.6 20.4 L11 19 L15.6 17.6 Z" fill="#f5f6f8"/>
+    <circle cx="28" cy="9" r="1.1" fill="#f5f6f8" fill-opacity="0.8"/>
+    <circle cx="55" cy="33" r="0.9" fill="#f5f6f8" fill-opacity="0.7"/>
+  </g>
+</svg>

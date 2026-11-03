@@ -175,18 +175,7 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
   // ----- Earth view -----
   const earthCanvas = h('canvas', { id: 'earth-canvas', class: 'earth-canvas', tabindex: '0', 'aria-label': 'World map with satellite ground points, the day and night line, and your city. Tap anywhere to see what is there.' });
   const earthInfo = h('div', { class: 'earth-info', id: 'earth-info' });
-  const earthSection = h('section', { class: 'view earth-view', id: 'view-earth', 'aria-label': 'Earth' },
-    h('div', { class: 'view-intro' },
-      h('h1', {}, 'Sky to ground'),
-      h('p', {}, 'Every satellite has a ground point: the spot right beneath it. The Sun and Moon have an overhead point. Tap a dot, or tap anywhere to see what is there. Pinch or double-tap to zoom, and drag to move around.'),
-    ),
-    h('div', { class: 'earth-stage' },
-      earthCanvas,
-      h('div', { class: 'map-controls' },
-        button('−', { class: 'chip small', 'aria-label': 'Zoom out' }, () => earthView.zoomBy(0.66)),
-        button('+', { class: 'chip small', 'aria-label': 'Zoom in' }, () => earthView.zoomBy(1.5)),
-      ),
-    ),
+  const legendPanel = h('div', { class: 'legend-panel', id: 'legend-panel', hidden: true },
     h('ul', { class: 'legend' },
       h('li', {}, h('span', { class: 'key square' }), 'You (the chosen city)'),
       h('li', {}, h('span', { class: 'key', style: `background:${ORBIT_COLORS.LEO}` }), 'LEO'),
@@ -196,8 +185,25 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
       h('li', {}, h('span', { class: 'key night' }), 'Night side'),
       h('li', {}, h('span', { class: 'key diamond' }), 'Space history'),
     ),
-    earthInfo,
     h('p', { class: 'caption' }, 'NASA Blue Marble (2004) under Natural Earth coastlines. Not a live picture. Dashed line: the selected satellite’s path over one orbit before and after now.'),
+  );
+  const legendButton = button('Key', { class: 'chip small', id: 'legend-button', 'aria-expanded': 'false', 'aria-controls': 'legend-panel' }, () => {
+    legendPanel.hidden = !legendPanel.hidden;
+    legendButton.setAttribute('aria-expanded', String(!legendPanel.hidden));
+  });
+  const earthSection = h('section', { class: 'view earth-view', id: 'view-earth', 'aria-label': 'Earth' },
+    earthCanvas,
+    h('div', { class: 'earth-overlay top' },
+      h('p', { class: 'overlay-status' }, h('strong', {}, 'Sky to ground. '), 'Tap anywhere to see what is there.'),
+    ),
+    h('div', { class: 'zoom-stack' },
+      button('+', { class: 'chip small', 'aria-label': 'Zoom in' }, () => earthView.zoomBy(1.5)),
+      button('−', { class: 'chip small', 'aria-label': 'Zoom out' }, () => earthView.zoomBy(0.66)),
+    ),
+    h('div', { class: 'earth-overlay bottom' },
+      legendPanel,
+      h('div', { class: 'earth-bar' }, legendButton, earthInfo),
+    ),
   );
   const earthView = new EarthView(earthCanvas, {
     onSelect: (id) => select(id),
@@ -504,17 +510,22 @@ export function mountExplore(root: HTMLElement, options: ExploreOptions = {}) {
 
   function renderEarthInfo() {
     if (!state.sky) return;
-    const sun = state.sky.things.find((thing) => thing.kind === 'sun');
-    const items: Node[] = [];
-    if (state.picked && state.below) items.push(regionCard(state.below.at(state.picked), 'The place you chose'));
-    if (sun?.body?.overhead && state.below) {
-      items.push(regionCard(state.below.at(sun.body.overhead), 'Where the Sun is straight overhead'));
+    const items: Array<[string, string, Coordinates]> = [];
+    for (const kind of ['sun', 'moon'] as const) {
+      const body = state.sky.things.find((thing) => thing.kind === kind)?.body;
+      if (!body?.overhead) continue;
+      const place = state.below?.at(body.overhead);
+      items.push([kind, `${kind === 'sun' ? 'Sun' : 'Moon'}: ${place?.name ?? 'open ocean'}`, body.overhead]);
     }
-    const key = items.map((node) => node.textContent).join('|');
-    if (earthInfo.dataset.key !== key) {
-      earthInfo.dataset.key = key;
-      earthInfo.replaceChildren(...items);
-    }
+    const key = items.map((item) => item[1]).join('|');
+    if (earthInfo.dataset.key === key) return;
+    earthInfo.dataset.key = key;
+    earthInfo.replaceChildren(...items.map(([kind, text, point]) => button(text, { class: `chip small overhead ${kind}`, 'aria-label': `${text.replace(':', ' is straight overhead above')}. Open this place.` }, () => {
+      state.picked = point;
+      earthView.setPicked(point);
+      earthView.centreOn(point);
+      openPlace(point, '');
+    })));
   }
 
   function renderList() {
